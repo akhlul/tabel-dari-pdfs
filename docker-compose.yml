@@ -1,4 +1,4 @@
-# docker compose up -d --build      -> http://localhost:8000
+# docker compose up -d --build      -> http://localhost:14433
 # The BPS key is read from .env (WEBAPI_BPS_KEY=...), the same file as without Docker.
 #
 # Backup / restore inside the container (or use Settings -> Backup and Restore in the app):
@@ -10,12 +10,13 @@ services:
     build: .
     image: tabel-dari-pdfs
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-14433}:14433"
     env_file:
       - path: .env
         required: false
     environment:
       DATA_DIR: /data
+      PORT: "14433"   # inside the container (the host port is set under ports)
       # MAX_PDF_MB: 250
       # JOB_WORKERS: 2
     volumes:

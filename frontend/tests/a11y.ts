@@ -1,7 +1,7 @@
 /**
  * Accessibility check (axe-core) in light and dark color schemes, plus a narrow-window layout check.
  *
- *   mise run check:a11y               # against http://127.0.0.1:8000
+ *   mise run check:a11y               # against http://127.0.0.1:14433
  *   BASE=http://127.0.0.1:8010 bun tests/a11y.ts
  *
  * Needs a running server and a Chromium-based browser (CHROME=/path/to/chrome, default google-chrome-stable).
@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright-core';
 
-const BASE = process.env.BASE ?? 'http://127.0.0.1:8000';
+const BASE = process.env.BASE ?? 'http://127.0.0.1:14433';
 const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 
 const docs = (await (await fetch(`${BASE}/api/documents`)).json()) as { id: string }[];

@@ -8,12 +8,12 @@ description = "Install backend (uv) and frontend (bun) dependencies"
 run = ["uv sync --project backend", "bun install --cwd frontend"]
 
 [tasks."dev:api"]
-description = "FastAPI on :8000 with reload"
+description = "FastAPI on :14433 with reload"
 dir = "backend"
-run = "uv run uvicorn app.main:app --port ${PORT:-8000} --reload --reload-dir app"
+run = "uv run uvicorn app.main:app --port ${PORT:-14433} --reload --reload-dir app"
 
 [tasks."dev:web"]
-description = "Astro dev server on :4321 (proxies /api to :8000)"
+description = "Astro dev server on :4321 (proxies /api to :14433)"
 dir = "frontend"
 run = "bunx astro dev --port 4321"
 
@@ -27,10 +27,10 @@ dir = "frontend"
 run = "bunx astro build"
 
 [tasks.start]
-description = "Production: one process on :8000 serving API + built UI"
+description = "Production: one process on :14433 serving API + built UI"
 depends = ["build"]
 dir = "backend"
-run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-14433}"
 
 [tasks.score]
 description = "Score engines vs ground truth: mise run score -- --gt DIR a.pdf b.pdf"
@@ -48,5 +48,10 @@ dir = "backend"
 run = "uv run python -m app.backup export"
 
 [tasks.docker]
-description = "Build and start the Docker container on :8000"
+description = "Build and start the Docker container on :14433"
 run = "docker compose up -d --build"
+
+[tasks.restore]
+description = "Restore a backup: mise run restore -- FILE.zip [--mode merge|replace]  (merge = add missing documents; default)"
+dir = "backend"
+run = "uv run python -m app.backup import"

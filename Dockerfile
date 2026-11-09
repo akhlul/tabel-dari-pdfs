@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Tabel dari PDF: one container serving the API and the built web UI on :8000.
+# Tabel dari PDF: one container serving the API and the built web UI on :14433.
 #   docker compose up -d --build        (see docker-compose.yml)
 # Library data (SQLite + PDFs) lives in /data: mount a volume there.
 
@@ -20,7 +20,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
-    PORT=8000
+    PORT=14433
 WORKDIR /app/backend
 # dependencies first: this layer is reused while only the code changes
 COPY backend/pyproject.toml backend/uv.lock ./
@@ -33,7 +33,7 @@ COPY --from=web /src/frontend/dist /app/frontend/dist
 RUN useradd --uid 1000 --create-home app && mkdir -p /data && chown app:app /data
 USER app
 VOLUME /data
-EXPOSE 8000
+EXPOSE 14433
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)" || exit 1
+  CMD python -c "import urllib.request; import os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"14433\")}/api/health', timeout=4)" || exit 1
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]

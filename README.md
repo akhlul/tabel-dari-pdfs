@@ -24,18 +24,18 @@ This rewrites `pdf-table-viewer`: **pdfspine** (Apache-2.0, pure Rust) replaces 
 cp .env.example .env          # add WEBAPI_BPS_KEY
 mise install                  # bun, python 3.12, uv
 mise run install              # uv sync + bun install
-mise run dev                  # API :8000 + UI :4321  -> http://localhost:4321
+mise run dev                  # API :14433 + UI :4321  -> http://localhost:4321
 # production: one process serving API + built UI
-mise run start                # -> http://localhost:8000
+mise run start                # -> http://localhost:14433
 ```
 
-Without mise: `cd backend && uv run uvicorn app.main:app --port 8000 --reload` and `cd frontend && bunx astro dev`.
+Without mise: `cd backend && uv run uvicorn app.main:app --port 14433 --reload` and `cd frontend && bunx astro dev`.
 
 ### Docker
 
 ```bash
 cp .env.example .env          # add WEBAPI_BPS_KEY (read by docker compose)
-docker compose up -d --build  # -> http://localhost:8000   (PORT=8080 docker compose up -d to change the port)
+docker compose up -d --build  # -> http://localhost:14433   (PORT=8080 docker compose up -d to change the port)
 ```
 One image (`Dockerfile`: Astro build stage + Python 3.12 slim, ~370 MB) serving API and UI, running as uid 1000.
 The library lives in the volume `tabel-data` mounted at `/data`; see `docker-compose.yml` to use a host folder instead.
