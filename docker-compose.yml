@@ -1,0 +1,29 @@
+# docker compose up -d --build      -> http://localhost:8000
+# The BPS key is read from .env (WEBAPI_BPS_KEY=...), the same file as without Docker.
+#
+# Backup / restore inside the container (or use Settings -> Backup and Restore in the app):
+#   docker compose exec app python -m app.backup export            # -> /data/backups/tabel-dari-pdfs-backup-....zip
+#   docker compose cp app:/data/backups/<file>.zip .
+#   docker compose cp backup.zip app:/data/backups/ && docker compose exec app python -m app.backup import /data/backups/backup.zip
+services:
+  app:
+    build: .
+    image: tabel-dari-pdfs
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /data
+      # MAX_PDF_MB: 250
+      # JOB_WORKERS: 2
+    volumes:
+      - tabel-data:/data
+      # or keep the library in a folder next to this file (e.g. the existing ./data of a non-Docker install);
+      # the container runs as uid 1000, so that folder must be writable by uid 1000:
+      # - ./data:/data
+    restart: unless-stopped
+
+volumes:
+  tabel-data:

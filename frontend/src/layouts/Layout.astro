@@ -1,0 +1,72 @@
+---
+import '../styles/global.css';
+import Icon from '../components/Icon.astro';
+
+interface Props { title: string; active?: 'library' | 'search' | 'tables' | 'doc' | 'settings'; full?: boolean; wide?: boolean }
+const { title, active, full = false, wide = false } = Astro.props;
+const nav = [
+  { id: 'library', href: '/', label: 'Library', icon: 'library' },
+  { id: 'tables', href: '/tables', label: 'Tables', icon: 'grid' },
+  { id: 'search', href: '/search', label: 'Search BPS', icon: 'search' },
+];
+---
+<!doctype html>
+<html lang="id" translate="no" class="notranslate">
+  <head>
+    <meta charset="utf-8" />
+    <!-- content is Indonesian statistics: never offer browser translation (Firefox / Chrome) -->
+    <meta name="google" content="notranslate" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} · Tabel dari PDF</title>
+  </head>
+  <body class={full ? 'h-dvh flex flex-col overflow-hidden' : ''}>
+    <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[80] focus:bg-surface focus:text-ink-900 focus:px-3 focus:py-2 focus:border focus:border-brand-500">Skip to Content</a>
+    <header class="h-12 shrink-0 bg-header text-white flex items-center px-4 gap-6 border-b border-brand-900">
+      <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
+        <span class="grid place-items-center size-7 bg-accent-500 text-white" aria-hidden="true"><Icon name="table" class="size-4" /></span>
+        <span class="text-[15px]">Tabel dari PDF</span>
+      </a>
+      <nav class="flex h-full">
+        {nav.map((n) => (
+          <a href={n.href} aria-current={active === n.id ? 'page' : undefined}
+             class:list={['flex items-center gap-md px-3 h-full text-[13px] border-b-2 transition-colors',
+               active === n.id ? 'border-white text-white font-semibold' : 'border-transparent text-white/75 hover:text-white']}>
+            <Icon name={n.icon} class="size-4" />{n.label}
+          </a>
+        ))}
+      </nav>
+      <div class="ml-auto flex items-center gap-lg text-[12px] text-white/80">
+        <slot name="header-right" />
+        <!-- HIG: only show status when something needs attention -->
+        <span id="health" role="status" class="flex items-center gap-md"></span>
+        <a href="/settings" title="Settings (saved in this browser only)" aria-current={active === 'settings' ? 'page' : undefined}
+           class:list={['flex items-center gap-md px-2 h-8 text-[13px]', active === 'settings' ? 'text-white font-semibold' : 'text-white/75 hover:text-white']}>
+          <Icon name="settings" class="size-4" /><span class="hidden md:inline">Settings</span></a>
+      </div>
+    </header>
+    <main id="main" tabindex="-1" class={full ? 'flex-1 min-h-0 flex flex-col' : wide ? 'max-w-[2000px] mx-auto px-6 py-6' : 'max-w-[1400px] mx-auto px-6 py-6'}>
+      <slot />
+    </main>
+    <script>
+      import { api } from '../lib/api';
+      import { icon } from '../lib/icons';
+      import { initTooltips } from '../lib/ui';
+      initTooltips();
+      const el = document.getElementById('health')!;
+      async function check() {
+        el.innerHTML = '';
+        try {
+          const h = await api.health();
+          if (!h.bps_key) el.innerHTML = `<span class="text-amber-400">${icon('dot', 'size-3')}</span>
+            <span title="Add WEBAPI_BPS_KEY=… to the .env file next to README.md, then restart the server">BPS search unavailable: API key missing</span>`;
+        } catch {
+          el.innerHTML = `<span class="text-red-400">${icon('x', 'size-3.5')}</span><span>Server not reachable</span>
+            <button id="hretry" class="btn btn-sm border-white/40 text-white hover:bg-white/10">Retry</button>`;
+          document.getElementById('hretry')!.addEventListener('click', check);
+        }
+      }
+      check();
+    </script>
+  </body>
+</html>

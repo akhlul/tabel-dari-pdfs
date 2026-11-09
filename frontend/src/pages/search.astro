@@ -1,0 +1,279 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+const thisYear = new Date().getFullYear();
+const years = Array.from({ length: thisYear - 1999 }, (_, i) => thisYear - i);
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+---
+<Layout title="Search BPS" active="search">
+  <div class="mb-5">
+    <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Search BPS</h1>
+    <p class="text-[13px] text-ink-600 mt-0.5">Find a publication (Publikasi) or press release (Berita Resmi Statistik) on BPS, then import its PDF to find its tables.</p>
+  </div>
+
+  <form id="form" class="panel mb-5">
+    <div class="flex border-b border-ink-200" role="tablist" aria-label="Kind of document">
+      <button type="button" role="tab" data-kind="publication" class="kind-tab px-4 h-10 text-[13px] font-medium border-b-2 -mb-px">Publications</button>
+      <button type="button" role="tab" data-kind="pressrelease" class="kind-tab px-4 h-10 text-[13px] font-medium border-b-2 -mb-px">Press Releases</button>
+    </div>
+    <div class="grid grid-cols-12 gap-3 p-4 items-end">
+      <div class="col-span-12 md:col-span-4">
+        <label class="label" for="keyword">Keyword</label>
+        <div class="relative">
+          <span class="absolute left-2.5 top-2 text-ink-400"><Icon name="search" /></span>
+          <input id="keyword" name="keyword" class="field w-full pl-8" placeholder="For example inflasi, PDRB, kemiskinan" autofocus />
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label class="label flex items-center gap-md" for="domain">Region<span id="located" class="normal-case tracking-normal font-normal text-ink-500 truncate"></span></label>
+        <input id="domain" name="domain" list="domains" class="field w-full" value="" placeholder="Finding your region…" autocomplete="off" />
+        <datalist id="domains"></datalist>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="year">Year</label>
+        <select id="year" name="year" class="field w-full"><option value="">All</option>{years.map((y) => <option>{y}</option>)}</select>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="month">Month</label>
+        <select id="month" name="month" class="field w-full"><option value="">All</option>{months.map((m, i) => <option value={i + 1}>{m}</option>)}</select>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="lang">Language</label>
+        <select id="lang" name="lang" class="field w-full"><option value="ind">Indonesian</option><option value="eng">English</option></select>
+      </div>
+      <div class="col-span-12 md:col-span-2 flex gap-2">
+        <button class="btn-primary flex-1"><Icon name="search" />Search</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="flex items-center justify-between mb-2 min-h-8">
+    <div id="summary" class="text-[12px] font-semibold uppercase tracking-wider text-ink-500"></div>
+    <div id="pager" class="flex items-center gap-1"></div>
+  </div>
+  <h2 class="sr-only">Results</h2>
+  <div id="results" class="panel divide-y divide-ink-100"></div>
+  <div class="py-5 flex flex-col items-center gap-md">
+    <button id="more" class="btn-line hidden">Show More</button>
+    <span id="moreinfo" class="text-[12px] text-ink-500"></span>
+  </div>
+</Layout>
+
+<script>
+  import { api, type BpsItem, type Domain } from '../lib/api';
+  import { $, $$, esc, fmtBytes, fmtDate, toast } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { getSettings, lastSearch, rememberSearch, defaultRegion, type SearchFilters } from '../lib/settings';
+
+  // filters: the URL (a shared / reloaded search) > the last search in this browser (never its keyword) > settings
+  const params = new URLSearchParams(location.search);
+  const fromUrl = ['kind', 'domain', 'year', 'month', 'lang', 'keyword'].some((k) => params.has(k));
+  const saved: SearchFilters = fromUrl ? {} : lastSearch() ?? {};
+  const get = (k: keyof SearchFilters) => (fromUrl ? params.get(k) : saved[k]) ?? '';
+  const settings = getSettings();
+  let kind = get('kind') === 'pressrelease' ? 'pressrelease' : 'publication';
+  let page = fromUrl ? +(params.get('page') ?? 1) || 1 : 1;
+  let domains: Domain[] = [];
+  const results = $('#results');
+  const f = {
+    keyword: $<HTMLInputElement>('#keyword'), domain: $<HTMLInputElement>('#domain'),
+    year: $<HTMLSelectElement>('#year'), month: $<HTMLSelectElement>('#month'), lang: $<HTMLSelectElement>('#lang'),
+  };
+  f.keyword.value = fromUrl ? params.get('keyword') ?? '' : '';
+  f.year.value = get('year');
+  f.month.value = get('month');
+  f.lang.value = get('lang') || settings.searchLang;
+  let domainParam = get('domain');
+
+  function setKind(k: string) {
+    kind = k;
+    $$('.kind-tab').forEach((b) => {
+      const on = b.dataset.kind === k;
+      b.setAttribute('aria-selected', String(on));
+      b.classList.toggle('border-brand-600', on); b.classList.toggle('text-ink-900', on);
+      b.classList.toggle('border-transparent', !on); b.classList.toggle('text-ink-500', !on);
+    });
+  }
+  setKind(kind);
+
+  const domainId = () => (f.domain.value.match(/\d{4}/)?.[0]) ?? '0000';
+
+  const showDomain = () => {
+    const cur = domains.find((d) => d.id === domainParam);
+    f.domain.value = cur ? `${cur.id} · ${cur.name}` : domainParam;
+  };
+  const domainsReady = api.domains().then((ds) => {
+    domains = ds;
+    $('#domains').innerHTML = ds.map((d) => `<option value="${d.id} · ${esc(d.name)}"></option>`).join('');
+    if (domainParam) showDomain();
+  }).catch(() => { /* datalist is optional */ });
+
+  function skeleton() {
+    results.innerHTML = Array.from({ length: 5 }).map(() => `<div class="flex gap-4 p-4"><div class="skeleton w-16 h-22"></div>
+      <div class="flex-1 space-y-2"><div class="skeleton h-4 w-2/3"></div><div class="skeleton h-3 w-1/3"></div><div class="skeleton h-3 w-full"></div></div></div>`).join('');
+  }
+
+  function item(it: BpsItem) {
+    const cover = it.cover
+      ? `<img src="${esc(it.cover)}" loading="lazy" alt="" class="w-full h-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-full h-full grid place-items-center text-ink-300',innerHTML:'${icon('file', 'size-6').replace(/"/g, '&quot;')}'}))"/>`
+      : `<div class="w-full h-full grid place-items-center text-ink-300">${icon('file', 'size-6')}</div>`;
+    const action = it.document_id
+      ? `<a href="/doc?id=${it.document_id}" class="btn-line">${icon('table')}Open from Library</a>`
+      : `<button class="btn-primary" data-import="${esc(it.id)}">${icon('download')}Import and Find Tables</button>`;
+    return `<article class="flex gap-4 p-4 hover:bg-ink-50/60" data-id="${esc(it.id)}">
+      <div class="w-16 h-22 shrink-0 bg-ink-50 border border-ink-200 overflow-hidden">${cover}</div>
+      <div class="flex-1 min-w-0">
+        <h3 class="text-[14px] font-medium text-ink-900 leading-snug">${esc(it.title)}</h3>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[12px] text-ink-500">
+          <span>${it.kind === 'publication' ? 'Publication' : 'Press release'}</span>
+          ${it.date ? `<span>Released ${fmtDate(it.date)}</span>` : ''}
+          ${it.size ? `<span>${esc(it.size)}</span>` : ''}
+          ${it.subject ? `<span class="chip border-ink-200 text-ink-600">${esc(it.subject)}</span>` : ''}
+          ${it.issn ? `<span>ISSN ${esc(it.issn)}</span>` : ''}
+        </div>
+        ${it.abstract ? `<p class="abstract mt-1.5 text-[12.5px] text-ink-700 line-clamp-2">${esc(it.abstract)}</p>
+          ${it.abstract.length > 220 ? '<button data-more class="mt-0.5 text-[12px] text-brand-600 hover:underline">Show Full Summary</button>' : ''}` : ''}
+      </div>
+      <div data-act class="flex flex-col items-end gap-md shrink-0 w-56">
+        ${action}
+        ${it.pdf ? `<a href="${esc(it.pdf)}" target="_blank" rel="noopener" class="btn-ghost btn-sm text-ink-600">${icon('external', 'size-3.5')}Original PDF on BPS</a>` : ''}
+      </div>
+    </article>`;
+  }
+
+  let lastPage = 1, pages = 1;
+  function pager(p: number, pages: number) {
+    const el = $('#pager');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML = `<button class="btn-line btn-sm btn-icon" data-page="${p - 1}" aria-label="Previous page" ${p <= 1 ? 'disabled' : ''}>${icon('left', 'size-3.5')}</button>
+      <span class="text-[12px] text-ink-600 px-2">Page <b>${p}</b> of ${pages}</span>
+      <button class="btn-line btn-sm btn-icon" data-page="${p + 1}" aria-label="Next page" ${p >= pages ? 'disabled' : ''}>${icon('right', 'size-3.5')}</button>`;
+  }
+
+  let items: BpsItem[] = [];
+  const query = (pg: number) => ({ kind, domain: domainId(), keyword: f.keyword.value.trim(), year: f.year.value ? +f.year.value : '' as const,
+    month: f.month.value ? +f.month.value : '' as const, page: pg, lang: f.lang.value });
+  const syncUrl = (p: ReturnType<typeof query>) => {
+    const qs = new URLSearchParams(Object.entries(p).filter(([, v]) => v !== '').map(([key, v]) => [key, String(v)]));
+    history.replaceState(null, '', `?${qs}`);
+  };
+  function moreButton() {
+    const more = $('#more');
+    more.classList.toggle('hidden', lastPage >= pages);
+    $('#moreinfo').textContent = pages > 1 ? `Showing pages ${page}–${lastPage} of ${pages}` : '';
+  }
+
+  async function search(push = true) {
+    const p = query(page);
+    if (push) syncUrl(p);
+    rememberSearch({ kind, domain: p.domain, year: f.year.value, month: f.month.value, lang: p.lang });
+    skeleton();
+    $('#more').classList.add('hidden'); $('#moreinfo').textContent = '';
+    $('#summary').textContent = 'Searching BPS…';
+    try {
+      const r = await api.bpsSearch(p);
+      items = r.items;
+      lastPage = r.page; pages = r.pages;
+      const dname = domains.find((d) => d.id === p.domain)?.name ?? p.domain;
+      $('#summary').textContent = r.total ? `${r.total.toLocaleString('en-GB')} ${r.total === 1 ? 'result' : 'results'} · ${dname}` : '';
+      results.innerHTML = r.items.map(item).join('') ||
+        `<div class="p-10 text-center text-[13px] text-ink-600">No ${kind === 'publication' ? 'publications' : 'press releases'} match. Try another keyword, region, year or month.
+          <div class="mt-3"><button id="clearq" class="btn-line btn-sm">Clear Year and Month</button></div></div>`;
+      $('#clearq')?.addEventListener('click', () => { f.year.value = ''; f.month.value = ''; page = 1; search(); });
+      pager(r.page, r.pages);
+      moreButton();
+    } catch (e: any) {
+      $('#summary').textContent = '';
+      results.innerHTML = `<div class="p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p>
+        <button id="retry" class="btn-primary mt-3">Retry</button></div>`;
+      $('#retry').addEventListener('click', () => search(false));
+    }
+  }
+
+  /** "Show More": append the next page below the results */
+  $('#more').addEventListener('click', async () => {
+    const b = $<HTMLButtonElement>('#more');
+    b.disabled = true;
+    b.innerHTML = `${icon('spinner', 'size-4')}Loading…`;
+    try {
+      const r = await api.bpsSearch(query(lastPage + 1));
+      items = [...items, ...r.items];
+      results.insertAdjacentHTML('beforeend', r.items.map(item).join(''));
+      lastPage = r.page; pages = r.pages;
+      pager(lastPage, pages);
+      syncUrl(query(lastPage));
+      moreButton();
+    } catch (e: any) {
+      toast(`More results could not be loaded: ${e.message}`, 'error');
+    } finally { b.disabled = false; b.textContent = 'Show More'; }
+  });
+
+  $('#form').addEventListener('submit', (e) => { e.preventDefault(); page = 1; search(); });
+  $$('.kind-tab').forEach((b) => b.addEventListener('click', () => { setKind(b.dataset.kind!); page = 1; search(); }));
+  [f.year, f.month, f.lang].forEach((s) => s.addEventListener('change', () => { page = 1; search(); }));
+  f.domain.addEventListener('change', () => { page = 1; search(); });
+  f.domain.addEventListener('focus', () => f.domain.select());
+  $('#pager').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-page]') as HTMLElement | null;
+    if (b) { page = +b.dataset.page!; search(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  });
+  results.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    const more = t.closest<HTMLElement>('[data-more]');
+    if (more) {
+      const p = more.previousElementSibling as HTMLElement;
+      const open = p.classList.toggle('line-clamp-2');
+      more.textContent = open ? 'Show Full Summary' : 'Show Less';
+      return;
+    }
+    const b = t.closest('[data-import]') as HTMLButtonElement | null;
+    if (b) startImport(b);
+  });
+
+  /** import with determinate download progress and Cancel (HIG: progress for anything over a second) */
+  async function startImport(b: HTMLButtonElement) {
+    const it = items.find((x) => x.id === b.dataset.import)!;
+    const box = b.closest<HTMLElement>('[data-act]')!;
+    const restore = box.innerHTML;
+    try {
+      const r = await api.bpsImport({ kind: it.kind, id: it.id, domain: domainId(), lang: f.lang.value, extract: true });
+      if (r.existing) { location.href = `/doc?id=${r.document.id}`; return; }
+      let st = r.import;
+      box.innerHTML = `<div class="w-full" role="status" aria-live="polite">
+        <div class="flex items-center gap-md text-[12px] text-ink-700 mb-1">${icon('spinner', 'size-3.5 text-brand-600')}<span data-msg class="flex-1">Starting…</span></div>
+        <div class="h-1.5 bg-ink-100"><div data-bar class="h-full bg-brand-500 transition-[width]" style="width:0%"></div></div>
+        <button data-cancel class="btn-ghost btn-sm mt-1">Cancel</button></div>`;
+      box.querySelector('[data-cancel]')!.addEventListener('click', () => api.importCancel(st.id));
+      while (true) {
+        const bar = box.querySelector<HTMLElement>('[data-bar]'), msg = box.querySelector('[data-msg]');
+        if (st.status === 'downloading') {
+          if (st.total) bar!.style.width = `${Math.min(100, (100 * st.done) / st.total)}%`;
+          msg!.textContent = `Downloading ${fmtBytes(st.done)}${st.total ? ` of ${fmtBytes(st.total)}` : ''}`;
+        } else if (st.status === 'processing') { bar!.style.width = '100%'; msg!.textContent = 'Reading the PDF…'; }
+        else if (st.status === 'done') { location.href = `/doc?id=${st.document!.id}`; return; }
+        else if (st.status === 'cancelled') { box.innerHTML = restore; return; }
+        else if (st.status === 'error') throw new Error(st.error ?? 'The import failed');
+        await new Promise((r) => setTimeout(r, 400));
+        st = await api.importStatus(st.id);
+      }
+    } catch (er: any) {
+      box.innerHTML = restore;
+      toast(`“${it.title.slice(0, 50)}” was not imported: ${er.message}`, 'error',
+        { action: { label: 'Retry', run: () => startImport(box.querySelector<HTMLButtonElement>('[data-import]')!) } });
+    }
+  }
+
+  // first search: wait for the default region when there is none yet (detected from where you are)
+  (async () => {
+    if (!domainParam) {
+      domainParam = await defaultRegion();
+      await domainsReady;
+      showDomain();
+      if (settings.region === 'auto') {
+        const l = JSON.parse(localStorage.getItem('tdp-located') || 'null');
+        if (l?.domain) $('#located').innerHTML = `· detected <a href="/settings" class="text-brand-600 hover:underline">(${l.source === 'location' ? 'your location' : 'internet address'})</a>`;
+      }
+    } else showDomain();
+    search(!fromUrl);
+  })();
+</script>

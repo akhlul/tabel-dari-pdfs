@@ -1,0 +1,359 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens, following the KDE HIG (develop.kde.org/hig):
+ *  - spacing: small 4 / medium 6 / large 8, grid unit 18 (Kirigami units)
+ *  - color has a meaning: blue = selection & focus, orange = non-default (edited), red = destructive,
+ *    green = "valid" flag. Never color alone: every state also has an icon or text.
+ *  - square corners everywhere (project decision: no squircles, deviates from Breeze cornerRadius)
+ */
+@theme {
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+
+  --spacing-sm: 4px;
+  --spacing-md: 6px;
+  --spacing-lg: 8px;
+  --spacing-grid: 18px;
+
+  --font-sans: "Inter", "Noto Sans", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Hack", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-surface: #ffffff;
+  --color-header: #072f62;
+  --color-ink-50: #f4f6f9;
+  --color-ink-100: #e7ebf1;
+  --color-ink-200: #cfd6e0;
+  --color-ink-300: #aab5c4;
+  --color-ink-400: #627086;
+  --color-ink-500: #56647a;
+  --color-ink-600: #434f61;
+  --color-ink-700: #333d4c;
+  --color-ink-800: #222a35;
+  --color-ink-900: #141a22;
+  --color-brand-50: #eef3fa;
+  --color-brand-100: #d6e2f2;
+  --color-brand-200: #adc4e4;
+  --color-brand-300: #7fa3d6;
+  --color-brand-500: #1f5fae;
+  --color-brand-600: #0f4c96;
+  --color-brand-700: #0a3d7d;
+  --color-brand-800: #072f62;
+  --color-brand-900: #052349;
+  --color-accent-400: #f9a54f;
+  --color-accent-500: #f28b24;
+  --color-accent-600: #a34c04;
+}
+
+/* dark color scheme (follows the system setting) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-surface: #1b2028;
+    --color-header: #0d1724;
+    --color-ink-50: #13171d;
+    --color-ink-100: #232a34;
+    --color-ink-200: #343d4a;
+    --color-ink-300: #4c5767;
+    --color-ink-400: #8b97aa;
+    --color-ink-500: #9aa6b8;
+    --color-ink-600: #b3bdcc;
+    --color-ink-700: #c8d0dc;
+    --color-ink-800: #dde3eb;
+    --color-ink-900: #f1f4f8;
+    --color-brand-50: #172739;
+    --color-brand-100: #1e3653;
+    --color-brand-200: #2b4d78;
+    --color-brand-300: #3f6aa3;
+    --color-brand-500: #5b9bec;
+    --color-brand-600: #4d8ee2;
+    --color-brand-700: #2f6fc4;
+    --color-brand-800: #275ea8;
+    --color-brand-900: #1d4a87;
+    --color-accent-600: #f6a65a;
+    --color-red-50: #36191c;
+    --color-red-200: #6b2a31;
+    --color-red-300: #8a3a42;
+    --color-red-600: #f0646d;
+    --color-red-700: #f58a91;
+    --color-red-800: #f7a7ad;
+    --color-emerald-600: #14946f;
+    --color-emerald-700: #4cd3a3;
+    --color-orange-50: #35260f;
+    --color-amber-400: #f5b94a;
+  }
+}
+
+@layer base {
+  html { @apply bg-ink-50 text-ink-800 antialiased; font-feature-settings: "tnum" 1, "cv11" 1; }
+  body { @apply min-h-dvh; }
+  ::selection { @apply bg-brand-200; }
+  /* focus ring: an outline, so it never looks like selection (which is a fill) */
+  :focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 1px; }
+  input, select, textarea, button { font: inherit; }
+  button, [role="button"], label, summary { cursor: default; }
+  a[href] { cursor: pointer; }
+}
+
+@utility btn {
+    @apply inline-flex items-center justify-center gap-md h-8 px-3 text-[13px] font-medium border select-none
+           whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-default;
+  }
+@utility btn-primary { @apply btn bg-brand-700 border-brand-700 text-white hover:bg-brand-800; }
+@utility btn-ghost { @apply btn border-transparent text-ink-700 hover:bg-ink-100; }
+@utility btn-line { @apply btn bg-surface border-ink-200 text-ink-700 hover:border-ink-400 hover:text-ink-900; }
+@utility btn-danger { @apply btn bg-surface border-ink-200 text-red-700 hover:bg-red-50 hover:border-red-300; }
+@utility btn-sm { @apply h-7 px-2 text-xs; }
+@utility btn-icon { @apply w-8 px-0; }
+@utility field {
+    @apply h-8 px-2.5 text-[13px] bg-surface border border-ink-200 text-ink-900 placeholder:text-ink-400
+           hover:border-ink-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+  }
+@utility label { @apply block text-[11px] font-semibold uppercase tracking-wider text-ink-500 mb-1; }
+@utility chip { @apply inline-flex items-center gap-sm h-5 px-1.5 text-[11px] font-medium border whitespace-nowrap; }
+@utility panel { @apply bg-surface border border-ink-200; }
+@utility kbd { @apply inline-block px-1 text-[10px] font-mono border border-ink-200 bg-ink-50 text-ink-500; }
+/* overlays get a contrasting outline so they stay visible on dark schemes */
+@utility menu { @apply absolute z-40 mt-1 min-w-48 bg-surface border border-ink-300 shadow-lg py-1; }
+@utility menu-item { @apply flex w-full items-center gap-lg px-3 h-8 text-[13px] text-left text-ink-700 hover:bg-brand-50 focus:bg-brand-50 focus:outline-none cursor-default; }
+@utility skeleton { @apply bg-ink-100 animate-pulse; }
+@utility toolbar { @apply flex items-center gap-md; }
+
+/* segmented radio (flag) */
+.flag-opt { display: flex; align-items: center; gap: var(--spacing-sm); padding: 0 8px; height: 100%; font-size: 12px; font-weight: 500; color: var(--color-ink-600); border-left: 1px solid var(--color-ink-200); }
+.flag-opt:first-child { border-left: 0; }
+.flag-opt:hover { background: var(--color-ink-50); }
+.flag-opt:has(input:checked) { background: #434f61; color: #fff; }
+.flag-opt:has(input[value="valid"]:checked) { background: #047857; }
+.flag-opt:has(input:focus-visible) { outline: 2px solid var(--color-brand-500); outline-offset: 1px; position: relative; z-index: 1; }
+
+/* thin scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--color-ink-300) transparent; }
+
+/* table editor */
+.grid-editor { border-collapse: separate; border-spacing: 0; }
+.grid-editor td, .grid-editor th { border-right: 1px solid var(--color-ink-200); border-bottom: 1px solid var(--color-ink-200); }
+.grid-editor td:focus-within { outline: 2px solid var(--color-brand-500); outline-offset: -2px; background: var(--color-surface); position: relative; z-index: 1; }
+.grid-editor tr.is-head td { background: var(--color-ink-100); font-weight: 600; color: var(--color-ink-900); }
+.grid-editor td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.grid-editor td.is-merged { box-shadow: inset 0 0 0 1px var(--color-ink-300); vertical-align: middle; }
+.grid-editor td.is-merged > div { text-align: center; }
+/* selection = blue */
+.grid-editor td.is-sel, .grid-editor tr.is-head td.is-sel { background: var(--color-brand-100); }
+/* non-default (edited) = orange */
+.grid-editor td.is-changed { box-shadow: inset 3px 0 0 var(--color-accent-500); }
+.grid-editor th.is-cur { background: var(--color-ink-200) !important; color: var(--color-ink-900) !important; }
+.grid-editor th.is-hi { background: var(--color-brand-600) !important; color: #fff !important; }
+.grid-editor tr.seg-start > td, .grid-editor tr.seg-start > th { border-top: 2px solid var(--color-brand-500); }
+.grid-editor .seg-tag { display: block; font-size: 9px; line-height: 1; padding: 1px 2px; margin: 1px -4px 2px auto; width: max-content; background: var(--color-brand-600); color: #fff; }
+.grid-editor tr.seg-flash > td { animation: segflash 1.4s ease-out; }
+@keyframes segflash { 0%, 30% { background: var(--color-brand-200); } 100% { background: inherit; } }
+.grid-editor ::selection { background: var(--color-brand-200); }
+
+/* read-only preview */
+.preview-table { border-collapse: collapse; font-size: 11.5px; }
+.preview-table th, .preview-table td { border: 1px solid var(--color-ink-200); padding: 3px 7px; vertical-align: top; white-space: pre-wrap; max-width: 22rem; }
+.preview-table th { background: var(--color-ink-100); font-weight: 600; color: var(--color-ink-900); text-align: center; vertical-align: middle; }
+.preview-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* pdf overlay: table areas. Flag = color + line style + text tag (never color alone) */
+.tbox { --c: var(--color-brand-500); position: absolute; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 7%, transparent); cursor: default; }
+.tbox:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
+.tbox:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 3px; }
+.tbox.s-valid { --c: #059669; }
+.tbox.s-invalid { --c: #8a96a8; border-style: dashed; background: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, #8a96a8 14%, transparent) 6px 7px); }
+.tbox.s-deleted { --c: #dc2626; border-style: dotted; opacity: .55; }
+/* the selected box: blue, thicker, with handles; only it can be moved */
+.tbox.is-active { --c: var(--color-brand-700); border-width: 3px; background: color-mix(in srgb, var(--color-brand-500) 12%, transparent); box-shadow: 0 0 0 1px #fff; cursor: move; z-index: 5; }
+.tbox > span.tag { position: absolute; top: -2px; left: -2px; transform: translateY(-100%); background: var(--c); color: #fff; font-size: 10px; font-weight: 600; padding: 1px 5px; white-space: nowrap; display: flex; gap: 4px; align-items: center; }
+.tbox .hdl { position: absolute; width: 10px; height: 10px; background: #fff; border: 2px solid var(--c); display: none; }
+.tbox.is-active .hdl { display: block; }
+.tbox .hdl[data-h="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
+.tbox .hdl[data-h="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+.tbox .hdl[data-h="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.tbox .hdl[data-h="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.tbox .hdl[data-h="n"] { left: calc(50% - 5px); top: -6px; cursor: ns-resize; }
+.tbox .hdl[data-h="s"] { left: calc(50% - 5px); bottom: -6px; cursor: ns-resize; }
+.tbox .hdl[data-h="w"] { top: calc(50% - 5px); left: -6px; cursor: ew-resize; }
+.tbox .hdl[data-h="e"] { top: calc(50% - 5px); right: -6px; cursor: ew-resize; }
+.tbox.is-part { border-style: dashed; }
+.tbox.is-active-part { --c: var(--color-brand-700); background: color-mix(in srgb, var(--color-brand-500) 10%, transparent); }
+.tbox.is-moving { opacity: .85; outline: 1px dashed var(--c); outline-offset: 3px; }
+.drawing { position: absolute; border: 2px dashed var(--color-brand-600); background: color-mix(in srgb, var(--color-brand-500) 10%, transparent); pointer-events: none; }
+
+/* tooltip (lib/ui.ts): shown on hover, keyboard focus and long-press */
+.tip { position: fixed; z-index: 70; max-width: 320px; padding: 4px 8px; font-size: 12px; line-height: 1.35; color: var(--color-ink-900); background: var(--color-surface); border: 1px solid var(--color-ink-300); box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; }
+.tip kbd { font-family: var(--font-mono); font-size: 10.5px; padding: 0 4px; margin-left: 6px; border: 1px solid var(--color-ink-300); color: var(--color-ink-600); }
+
+/* HIG: when animations are disabled, transitions are instant and spinners static */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
+}
+#tlist:focus-visible .row-focus { outline: 2px solid var(--color-brand-500); outline-offset: -2px; }
+
+
+/* ---------------------------------------------------------------- PDF text layer (selectable text)
+   from pdfjs-dist/web/pdf_viewer.css (.textLayer); positions scale with --total-scale-factor (= zoom) */
+.pdf-page { --scale-round-x: 1px; --scale-round-y: 1px; }
+.textLayer {
+  color-scheme: only light;
+
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+     -moz-text-size-adjust: none;
+          text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+
+  &.highlighting {
+    touch-action: none;
+  }
+
+  :is(span, br) {
+    color: transparent;
+    position: absolute;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+    -webkit-user-select: text;
+       -moz-user-select: text;
+            user-select: text;
+  }
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+
+  > :not(.markedContent),
+  .markedContent span:not(.markedContent) {
+    z-index: 1;
+
+    --font-height: 0;
+    font-size: calc(var(--text-scale-factor) * var(--font-height));
+
+    --scale-x: 1;
+    --rotate: 0deg;
+    transform: rotate(var(--rotate)) scaleX(var(--scale-x))
+      scale(var(--min-font-size-inv));
+  }
+
+  .markedContent {
+    display: contents;
+  }
+
+  span[role="img"] {
+    -webkit-user-select: none;
+       -moz-user-select: none;
+            user-select: none;
+    cursor: default;
+  }
+
+  .highlight {
+    --highlight-bg-color: rgb(180 0 170 / 0.25);
+    --highlight-selected-bg-color: rgb(0 100 0 / 0.25);
+    --highlight-backdrop-filter: none;
+    --highlight-selected-backdrop-filter: none;
+
+    @media screen and (forced-colors: active) {
+      --highlight-bg-color: transparent;
+      --highlight-selected-bg-color: transparent;
+      --highlight-backdrop-filter: var(--hcm-highlight-filter);
+      --highlight-selected-backdrop-filter: var(
+        --hcm-highlight-selected-filter
+      );
+    }
+
+    margin: -1px;
+    padding: 1px;
+    background-color: var(--highlight-bg-color);
+    backdrop-filter: var(--highlight-backdrop-filter);
+    border-radius: 4px;
+
+    &.appended {
+      position: initial;
+    }
+
+    &.begin {
+      border-radius: 4px 0 0 4px;
+    }
+
+    &.end {
+      border-radius: 0 4px 4px 0;
+    }
+
+    &.middle {
+      border-radius: 0;
+    }
+
+    &.selected {
+      background-color: var(--highlight-selected-bg-color);
+      backdrop-filter: var(--highlight-selected-backdrop-filter);
+      scroll-margin-top: 50px;
+    }
+  }
+
+  ::-moz-selection {
+    background: rgba(0 0 255 / 0.25);
+    background: color-mix(in srgb, AccentColor, transparent 50%);
+    color: transparent;
+  }
+
+  ::selection {
+    background: rgba(0 0 255 / 0.25);
+    background: color-mix(in srgb, AccentColor, transparent 50%);
+    color: transparent;
+  }
+
+  &.selectionRendering {
+    ::-moz-selection {
+      background: transparent;
+      color: transparent;
+    }
+    ::selection {
+      background: transparent;
+      color: transparent;
+    }
+  }
+  br::-moz-selection {
+    background: transparent;
+  }
+  br::selection {
+    background: transparent;
+  }
+
+  .endOfContent {
+    display: block;
+    position: absolute;
+    inset: 100% 0 0;
+    z-index: 0;
+    cursor: default;
+    -webkit-user-select: none;
+       -moz-user-select: none;
+            user-select: none;
+  }
+
+  &.selecting .endOfContent {
+    top: 0;
+  }
+}
+
+/* boxes take the pointer, the empty overlay does not: text between tables stays selectable */
+.pv-overlay { pointer-events: none; }
+.pv-overlay > * { pointer-events: auto; }
+/* "Select Text" mode: boxes stay visible but let the pointer through to the text inside them */
+.text-mode .pv-overlay .tbox { pointer-events: none !important; background: transparent; }
+.text-mode .pv-overlay .tbox > .tag { opacity: .6; }

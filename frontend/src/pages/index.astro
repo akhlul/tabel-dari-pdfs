@@ -1,0 +1,593 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout title="Library" active="library" wide>
+  <div class="flex flex-wrap items-end justify-between gap-grid mb-4">
+    <div>
+      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Library</h1>
+      <p class="text-[13px] text-ink-600 mt-0.5">PDFs you uploaded or imported from BPS, sorted into categories, with the tables found in them.</p>
+    </div>
+    <div class="toolbar">
+      <div class="relative">
+        <span class="absolute left-2.5 top-2 text-ink-400" aria-hidden="true"><Icon name="search" class="size-4" /></span>
+        <input id="filter" type="search" aria-label="Filter documents by title" class="field w-64 pl-8" placeholder="Filter by title" />
+      </div>
+      <a href="/search" class="btn-line"><Icon name="search" />Search BPS</a>
+      <button id="pick" class="btn-primary"><Icon name="upload" />Upload PDF…</button>
+      <input id="file" type="file" accept="application/pdf,.pdf" multiple class="hidden" aria-hidden="true" tabindex="-1" />
+    </div>
+  </div>
+
+  <div id="drop" class="panel border-dashed border-ink-300 flex flex-wrap items-center gap-grid px-4 py-2.5 mb-5 transition-colors">
+    <span class="grid place-items-center size-8 bg-brand-50 text-brand-700 border border-brand-100" aria-hidden="true"><Icon name="upload" class="size-4" /></span>
+    <div class="flex-1 min-w-60">
+      <div class="text-[13px] font-medium text-ink-900">Drop PDF files here to upload them</div>
+      <div class="text-[12px] text-ink-600">Uploads go to <b>Uncategorized</b>, or to the selected category. BPS imports are sorted by their BPS subject.</div>
+    </div>
+    <label class="flex items-center gap-lg text-[12.5px] text-ink-700">
+      <input id="auto" type="checkbox" checked class="accent-brand-700" />Find tables right after uploading
+    </label>
+  </div>
+
+  <div class="flex gap-grid items-start">
+    <aside class="w-72 shrink-0 panel sticky top-4 max-h-[calc(100dvh-5rem)] flex flex-col" aria-label="Categories">
+      <div class="flex items-center px-4 pt-3 pb-1.5 border-b border-ink-100">
+        <span class="label !mb-0 flex-1">Categories</span>
+        <button id="t-collapse" class="btn-ghost btn-sm !h-6 !px-1.5 text-[11px]" title="Collapse all">Collapse</button>
+      </div>
+      <div id="tree" role="tree" aria-label="Categories" class="flex-1 min-h-0 overflow-y-auto py-1 text-[13px]">
+        {Array.from({ length: 6 }).map(() => <div class="px-4 py-1.5"><div class="skeleton h-4 w-3/4"></div></div>)}
+      </div>
+      <p class="px-4 py-2 border-t border-ink-100 text-[11px] text-ink-500">Drag documents onto a category to move them. Right-click a category to rename it.</p>
+    </aside>
+
+    <section class="flex-1 min-w-0" aria-label="Documents">
+      <div class="flex flex-wrap items-center gap-lg mb-3 min-h-8">
+        <nav id="crumbs" aria-label="Current category" class="flex flex-wrap items-center gap-sm text-[13px] text-ink-600"></nav>
+        <span id="count" class="text-[12px] text-ink-500" aria-live="polite"></span>
+        <span class="flex-1"></span>
+        <label class="flex items-center gap-md text-[12.5px] text-ink-700" title="Year in the title (for example “… 2025”), else the BPS release year">
+          <Icon name="filter" class="size-3.5 text-ink-500" />Year
+          <select id="year" class="field h-8 text-[12.5px] min-w-32"><option value="">All years</option></select>
+        </label>
+        <span id="selbar" class="hidden items-center gap-md text-[12.5px] text-ink-700">
+          <span id="selcount" class="font-medium"></span>
+          <button id="sel-move" class="btn-line btn-sm"><Icon name="folder" class="size-3.5" />Move to Category…</button>
+          <button id="sel-clear" class="btn-ghost btn-sm">Clear</button>
+        </span>
+        <div class="flex border border-ink-200 bg-surface" role="group" aria-label="View">
+          <button data-view="grid" class="btn-ghost btn-sm btn-icon !border-0" title="Cards" aria-pressed="false"><Icon name="grid" class="size-4" /></button>
+          <button data-view="list" class="btn-ghost btn-sm btn-icon !border-0" title="List" aria-pressed="false"><Icon name="list" class="size-4" /></button>
+        </div>
+      </div>
+      <div id="list">
+        <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map(() => (
+            <div class="panel p-4 flex gap-grid"><div class="skeleton w-20 h-28"></div>
+              <div class="flex-1 space-y-2"><div class="skeleton h-4 w-3/4"></div><div class="skeleton h-3 w-1/2"></div></div></div>
+          ))}
+        </div>
+      </div>
+      <div id="empty" class="hidden panel px-6 py-16 text-center">
+        <div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3" aria-hidden="true"><Icon name="file" class="size-6" /></div>
+        <h2 class="font-medium text-ink-900">No documents yet</h2>
+        <p class="text-[13px] text-ink-600 mt-1 mb-4">Upload a PDF, or import a publication or press release from BPS.</p>
+        <div class="flex justify-center gap-lg">
+          <button id="pick2" class="btn-primary"><Icon name="upload" />Upload PDF…</button>
+          <a href="/search" class="btn-line"><Icon name="search" />Search BPS</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<script>
+  import { api, type Doc } from '../lib/api';
+  import { $, $$, esc, fmtBytes, ago, toast, toastError, plural, KIND_LABEL, debounce, contextMenu, isMenuKey } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { getSettings } from '../lib/settings';
+  import { UNCAT, SEP, buildTree, allPaths, catLabel, categoryDialog, isUnder, pathKey, type CatNode } from '../lib/categories';
+
+  const list = $('#list'), empty = $('#empty'), count = $('#count'), tree = $('#tree');
+  let docs: Doc[] = [];
+  let root: CatNode = buildTree([]);
+  /** selected node: null = all documents, 'uncat' = uncategorised, else a category path */
+  type Sel = null | 'uncat' | string[];
+  let sel: Sel = null;
+  const picked = new Set<string>();
+  const settings = getSettings();
+  let view: 'grid' | 'list' = (localStorage.getItem('lib-view') as 'grid' | 'list') || settings.libraryView;
+  ($('#auto') as HTMLInputElement).checked = settings.findTablesOnUpload;
+  /** year filter: '' = all, 'none' = documents without a year; separate from the category tree */
+  let year = '';
+  const open = new Set<string>(JSON.parse(localStorage.getItem('lib-open') || 'null') ?? []);
+  let openInit = !localStorage.getItem('lib-open'); // first visit: top level open
+
+  const kindOf = (d: Doc) => (d.source === 'bps' ? (d.meta.kind as string) : 'upload');
+  const cat = (d: Doc) => d.category ?? [];
+
+  /** the year a document is about: the last year in its title ("… 2025", "2019–2024" -> 2024), else the BPS release year */
+  function docYear(d: Doc): string | null {
+    const ys = [...d.title.matchAll(/(?<!\d)(19[5-9]\d|20\d\d)(?!\d)/g)].map((m) => m[1]!);
+    if (ys.length) return ys.at(-1)!;
+    const rel = typeof d.meta?.date === 'string' ? d.meta.date.slice(0, 4) : '';
+    return /^\d{4}$/.test(rel) ? rel : null;
+  }
+  /** every category, whatever the year filter (for pickers) */
+  const fullTree = () => buildTree(docs.map((d) => ({ category: cat(d) })));
+  const yearOk = (d: Doc) => !year || (year === 'none' ? !docYear(d) : docYear(d) === year);
+  const inSel = (d: Doc) => sel === null || (sel === 'uncat' ? !cat(d).length : isUnder(cat(d), sel));
+  const saveOpen = () => localStorage.setItem('lib-open', JSON.stringify([...open]));
+
+  // ------------------------------------------------------------ URL state (?cat=["A","B"] or ?cat=uncat)
+  function readUrl() {
+    year = new URLSearchParams(location.search).get('year') ?? '';
+    const c = new URLSearchParams(location.search).get('cat');
+    if (!c) sel = null;
+    else if (c === 'uncat') sel = 'uncat';
+    else { try { const p = JSON.parse(c); sel = Array.isArray(p) ? p.map(String) : null; } catch { sel = null; } }
+  }
+  function writeUrl() {
+    const u = new URL(location.href);
+    if (sel === null) u.searchParams.delete('cat');
+    else u.searchParams.set('cat', sel === 'uncat' ? 'uncat' : JSON.stringify(sel));
+    if (year) u.searchParams.set('year', year); else u.searchParams.delete('year');
+    history.replaceState(null, '', u);
+  }
+  const sameSel = (a: Sel, b: Sel) => JSON.stringify(a) === JSON.stringify(b);
+
+  // ------------------------------------------------------------ tree
+  function nodeRow(n: CatNode, depth: number): string {
+    const key = pathKey(n.path);
+    const kids = n.children.length > 0;
+    const isOpen = open.has(key);
+    const on = Array.isArray(sel) && sameSel(sel, n.path);
+    let html = `<div role="treeitem" aria-level="${depth + 1}" aria-selected="${on}" ${kids ? `aria-expanded="${isOpen}"` : ''}
+        data-node="${esc(key)}" tabindex="${on ? 0 : -1}" title="${esc(catLabel(n.path))}"
+        class="group/n flex items-center gap-sm h-7 pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
+        ${on ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-ink-50'}" style="padding-left:${6 + depth * 14}px">
+      <button data-toggle="${esc(key)}" tabindex="-1" aria-hidden="true" class="grid place-items-center size-5 shrink-0 text-ink-400 hover:text-ink-800 ${kids ? '' : 'invisible'}">
+        <span class="${isOpen ? '' : '-rotate-90'} transition-transform">${icon('chevron', 'size-3.5')}</span></button>
+      ${icon(isOpen && kids ? 'folderOpen' : 'folder', `size-4 ${on ? 'text-brand-600' : 'text-ink-400'}`)}
+      <span class="flex-1 min-w-0 truncate">${esc(n.name)}</span>
+      <span class="text-[11px] tabular-nums text-ink-500">${n.count}</span></div>`;
+    if (kids && isOpen) html += `<div role="group">${n.children.map((c) => nodeRow(c, depth + 1)).join('')}</div>`;
+    return html;
+  }
+
+  function renderTree() {
+    if (openInit && root.children.length) { root.children.forEach((c) => open.add(pathKey(c.path))); openInit = false; saveOpen(); }
+    const special = (id: 'all' | 'uncat', label: string, ic: string, n: number) => {
+      const on = id === 'all' ? sel === null : sel === 'uncat';
+      return `<div role="treeitem" aria-level="1" aria-selected="${on}" data-node="${id}" tabindex="${on ? 0 : -1}"
+        class="flex items-center gap-sm h-8 pl-3 pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
+        ${on ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-ink-50'}">
+        ${icon(ic, `size-4 ${on ? 'text-brand-600' : 'text-ink-500'}`)}<span class="flex-1">${label}</span>
+        <span class="text-[11px] tabular-nums text-ink-500">${n}</span></div>`;
+    };
+    tree.innerHTML = special('all', 'All Documents', 'library', root.count)
+      + `<div class="my-1 border-t border-ink-100"></div>`
+      + root.children.map((c) => nodeRow(c, 0)).join('')
+      + (root.own || sel === 'uncat' ? `<div class="my-1 border-t border-ink-100"></div>${special('uncat', UNCAT, 'inbox', root.own)}` : '');
+    if (!tree.querySelector('[tabindex="0"]')) tree.querySelector<HTMLElement>('[role=treeitem]')?.setAttribute('tabindex', '0');
+  }
+
+  const nodeSel = (el: HTMLElement): Sel => {
+    const k = el.dataset.node!;
+    return k === 'all' ? null : k === 'uncat' ? 'uncat' : JSON.parse(k);
+  };
+
+  function select(s: Sel, focus = false) {
+    sel = s;
+    if (Array.isArray(s)) for (let i = 1; i < s.length; i++) open.add(pathKey(s.slice(0, i))); // reveal it
+    saveOpen();
+    writeUrl();
+    render();
+    if (focus) tree.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+  }
+
+  tree.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const tg = t.closest<HTMLElement>('[data-toggle]');
+    if (tg) { const k = tg.dataset.toggle!; open.has(k) ? open.delete(k) : open.add(k); saveOpen(); renderTree(); return; }
+    const n = t.closest<HTMLElement>('[data-node]');
+    if (n) select(nodeSel(n), true);
+  });
+  tree.addEventListener('keydown', (e) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
+    if (!n) return;
+    const items = $$<HTMLElement>('[role=treeitem]', tree);
+    const i = items.indexOf(n);
+    const k = n.dataset.node!;
+    const go = (j: number) => { e.preventDefault(); const x = items[Math.max(0, Math.min(items.length - 1, j))]; if (x) { items.forEach((y) => (y.tabIndex = -1)); x.tabIndex = 0; x.focus(); } };
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(nodeSel(n), true); }
+    else if (e.key === 'ArrowRight' && n.hasAttribute('aria-expanded')) {
+      e.preventDefault();
+      if (!open.has(k)) { open.add(k); saveOpen(); renderTree(); tree.querySelector<HTMLElement>(`[data-node="${CSS.escape(k)}"]`)?.focus(); } else go(i + 1);
+    } else if (e.key === 'ArrowLeft' && k !== 'all' && k !== 'uncat') {
+      e.preventDefault();
+      if (open.has(k) && n.hasAttribute('aria-expanded')) { open.delete(k); saveOpen(); renderTree(); tree.querySelector<HTMLElement>(`[data-node="${CSS.escape(k)}"]`)?.focus(); }
+      else { const p = (JSON.parse(k) as string[]).slice(0, -1); if (p.length) tree.querySelector<HTMLElement>(`[data-node="${CSS.escape(pathKey(p))}"]`)?.focus(); }
+    } else if (isMenuKey(e)) { e.preventDefault(); nodeMenu(n, n); }
+  });
+  tree.addEventListener('contextmenu', (e) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
+    if (n) nodeMenu(e, n);
+  });
+  $('#t-collapse').addEventListener('click', () => { open.clear(); saveOpen(); renderTree(); });
+
+  function nodeMenu(at: MouseEvent | HTMLElement, n: HTMLElement) {
+    const s = nodeSel(n);
+    if (!Array.isArray(s)) return contextMenu(at, [{ label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) }]);
+    contextMenu(at, [
+      { heading: catLabel(s) },
+      { label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) },
+      { label: 'Rename or Move Category…', icon: 'edit', action: () => renameCategory(s) },
+      { label: `Move Its Documents to ${UNCAT}`, icon: 'inbox', danger: true, action: () => dissolve(s) },
+    ]);
+  }
+
+  async function renameCategory(path: string[]) {
+    const to = await categoryDialog({ heading: `Rename or move “${path.at(-1)}”`, current: path, known: allPaths(fullTree()).filter((p) => !isUnder(p, path)), okLabel: 'Save' });
+    if (to === null || to === 'auto' || JSON.stringify(to) === JSON.stringify(path)) return;
+    try {
+      await api.renameCategory(path, to);
+      if (Array.isArray(sel) && isUnder(sel, path)) sel = [...to, ...sel.slice(path.length)];
+      await load();
+      toast(`Category is now “${catLabel(to)}”`, 'ok', { action: { label: 'Undo', run: async () => { await api.renameCategory(to, path); await load(); } } });
+    } catch (er) { toastError(er); }
+  }
+
+  async function dissolve(path: string[]) {
+    const moved = docs.filter((d) => isUnder(cat(d), path)).map((d) => ({ id: d.id, category: cat(d) }));
+    try {
+      await api.renameCategory(path, []);
+      if (Array.isArray(sel) && isUnder(sel, path)) sel = 'uncat';
+      await load();
+      toast(`${plural(moved.length, 'document')} moved to ${UNCAT}`, 'info', { action: { label: 'Undo', run: () => restoreCats(moved) } });
+    } catch (er) { toastError(er); }
+  }
+
+  async function restoreCats(prev: { id: string; category: string[] }[]) {
+    const by = new Map<string, string[]>();
+    for (const p of prev) { const k = pathKey(p.category); by.set(k, [...(by.get(k) ?? []), p.id]); }
+    for (const [k, ids] of by) await api.moveDocuments(ids, JSON.parse(k));
+    await load();
+  }
+
+  /** move documents: to a given path / 'auto', or ask with the category dialog */
+  async function moveDocs(ids: string[], target?: string[] | 'auto') {
+    const ds = docs.filter((d) => ids.includes(d.id));
+    if (!ds.length) return;
+    let to: string[] | 'auto' | null = target ?? null;
+    if (!to) {
+      to = await categoryDialog({
+        heading: ds.length === 1 ? `Move “${ds[0]!.title.slice(0, 70)}”` : `Move ${ds.length} documents`,
+        current: ds.length === 1 ? cat(ds[0]!) : Array.isArray(sel) ? sel : [],
+        known: allPaths(fullTree()), auto: ds.some((d) => d.source === 'bps'),
+      });
+    }
+    if (to === null) return;
+    const prev = ds.map((d) => ({ id: d.id, category: cat(d) }));
+    try {
+      if (to === 'auto') for (const d of ds) await api.autoCategory(d.id);
+      else await api.moveDocuments(ds.map((d) => d.id), to);
+      picked.clear();
+      await load();
+      const where = to === 'auto' ? 'their automatic category' : `“${catLabel(to)}”`;
+      toast(`${ds.length === 1 ? 'Moved' : `Moved ${ds.length} documents`} to ${where}`, 'ok', { action: { label: 'Undo', run: () => restoreCats(prev) } });
+    } catch (er) { toastError(er); }
+  }
+
+  // ------------------------------------------------------------ documents
+  function shownDocs() {
+    const f = ($('#filter') as HTMLInputElement).value.trim().toLowerCase();
+    let ds = docs.filter((d) => inSel(d) && yearOk(d));
+    const inNode = ds.length;
+    if (f) ds = ds.filter((d) => d.title.toLowerCase().includes(f) || d.filename.toLowerCase().includes(f));
+    return { ds, inNode, f };
+  }
+
+  /** groups by full category path, in tree order (uncategorised last) */
+  function groups(ds: Doc[]) {
+    const orderOf = new Map(allPaths(fullTree()).map((p, i) => [pathKey(p), i]));
+    const by = new Map<string, Doc[]>();
+    for (const d of ds) { const k = pathKey(cat(d)); by.set(k, [...(by.get(k) ?? []), d]); }
+    return [...by.entries()].map(([k, items]) => ({ path: JSON.parse(k) as string[], items }))
+      .sort((a, b) => (a.path.length ? orderOf.get(pathKey(a.path)) ?? 1e9 : 1e9 + 1) - (b.path.length ? orderOf.get(pathKey(b.path)) ?? 1e9 : 1e9 + 1));
+  }
+
+  function badgeOf(d: Doc) {
+    const status = d.last_job_status;
+    return status === 'running' || status === 'queued'
+      ? `<span class="chip border-brand-200 bg-brand-50 text-brand-700">${icon('spinner', 'size-3')}finding tables</span>`
+      : status === 'error' ? `<span class="chip border-red-200 bg-red-50 text-red-700">${icon('x', 'size-3')}finding tables failed</span>` : '';
+  }
+
+  // card = <article>; the title link stretches over the card (no buttons nested inside a link)
+  function card(d: Doc) {
+    const kind = kindOf(d);
+    const fallback = d.source === 'bps' && d.meta.cover ? d.meta.cover : '';
+    const on = picked.has(d.id);
+    return `<article data-doc="${d.id}" draggable="true" class="group panel p-4 flex gap-grid hover:border-brand-500 focus-within:border-brand-500 transition-colors relative ${on ? '!border-brand-500 bg-brand-50/40' : ''}">
+      <input type="checkbox" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}"
+        class="absolute top-2 left-2 z-10 accent-brand-700 ${on || picked.size ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}" />
+      <div class="w-20 h-28 shrink-0 bg-ink-100 border border-ink-200 overflow-hidden">
+        <img src="${api.thumbUrl(d.id)}" loading="lazy" alt="" draggable="false" class="w-full h-full object-cover object-top"
+             onerror="this.onerror=null;${fallback ? `this.src='${esc(fallback)}'` : "this.style.visibility='hidden'"}" />
+      </div>
+      <div class="flex-1 min-w-0 flex flex-col">
+        <div class="flex items-center gap-md mb-1.5 pr-14">
+          <span class="chip border-ink-200 text-ink-700 bg-ink-50">${KIND_LABEL[kind] ?? kind}</span>${badgeOf(d)}
+        </div>
+        <h3 class="text-[13.5px] font-medium leading-snug text-ink-900 line-clamp-3">
+          <a href="/doc?id=${d.id}" draggable="false" class="after:absolute after:inset-0 hover:text-brand-700 focus:outline-none">${esc(d.title)}</a></h3>
+        <div class="mt-auto pt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-600 whitespace-nowrap">
+          <span class="flex items-center gap-sm ${d.table_count ? 'text-ink-900 font-medium' : ''}">${icon('table', 'size-3.5')}${plural(d.table_count ?? 0, 'table')}</span>
+          ${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="relative z-10 flex items-center gap-sm text-emerald-700 font-medium hover:underline">${icon('flagOk', 'size-3.5')}${d.valid_count} valid</a>` : ''}
+          <span>${plural(d.page_count, 'page')}</span><span>${fmtBytes(d.size)}</span>
+          <span class="ml-auto">${ago(d.updated_at)}</span>
+        </div>
+      </div>
+      <div class="absolute top-2 right-2 z-10 flex">
+        <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
+        <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button>
+      </div>
+    </article>`;
+  }
+
+  function row(d: Doc) {
+    const on = picked.has(d.id);
+    return `<tr data-doc="${d.id}" draggable="true" class="group border-t border-ink-100 hover:bg-ink-50 ${on ? 'bg-brand-50/60' : ''}">
+      <td class="w-8 pl-3"><input type="checkbox" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}" class="accent-brand-700" /></td>
+      <td class="py-1.5 pr-3 min-w-0"><div class="flex items-center gap-md">
+        <a href="/doc?id=${d.id}" draggable="false" class="text-ink-900 font-medium hover:text-brand-700 hover:underline line-clamp-2">${esc(d.title)}</a>${badgeOf(d)}</div></td>
+      <td class="px-2 whitespace-nowrap text-ink-600">${KIND_LABEL[kindOf(d)] ?? ''}</td>
+      <td class="px-2 text-right tabular-nums ${d.table_count ? 'text-ink-900' : 'text-ink-400'}">${d.table_count ?? 0}</td>
+      <td class="px-2 text-right tabular-nums">${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="text-emerald-700 font-medium hover:underline">${d.valid_count}</a>` : '<span class="text-ink-400">0</span>'}</td>
+      <td class="px-2 text-right tabular-nums text-ink-600">${d.page_count}</td>
+      <td class="px-2 whitespace-nowrap text-ink-500">${ago(d.updated_at)}</td>
+      <td class="pr-2 whitespace-nowrap text-right">
+        <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
+        <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button></td>
+    </tr>`;
+  }
+
+  function groupHead(path: string[], n: number) {
+    const base = Array.isArray(sel) ? sel.length : 0;
+    const label = path.length
+      ? path.map((p, i) => i < base ? `<span class="text-ink-500">${esc(p)}</span>` : `<span class="text-ink-900">${esc(p)}</span>`).join('<span class="text-ink-300 px-1">/</span>')
+      : `<span class="text-ink-900">${UNCAT}</span>`;
+    return `<button data-go="${esc(path.length ? pathKey(path) : 'uncat')}" class="flex items-center gap-md mb-2 text-[12.5px] font-semibold hover:underline text-left">
+      ${icon(path.length ? 'folder' : 'inbox', 'size-4 text-ink-400')}<span>${label}</span><span class="text-[11px] font-normal text-ink-500">${n}</span></button>`;
+  }
+
+  function renderList() {
+    const { ds, inNode, f } = shownDocs();
+    count.textContent = f ? `${ds.length} of ${plural(inNode, 'document')}` : plural(inNode, 'document');
+    empty.classList.toggle('hidden', docs.length > 0);
+    list.classList.toggle('hidden', docs.length === 0);
+    if (!ds.length) {
+      list.innerHTML = `<div class="panel p-8 text-center text-[13px] text-ink-600">${f ? `No document title here contains “${esc(f)}”.
+        <button id="clearf" class="btn-line btn-sm ml-2">Clear Filter</button>` : year ? `No documents ${year === 'none' ? 'without a year' : `from ${year}`} here.
+        <button id="cleary" class="btn-line btn-sm ml-2">All Years</button>` : 'No documents in this category.'}</div>`;
+      $('#cleary')?.addEventListener('click', () => { year = ''; writeUrl(); render(); });
+      $('#clearf')?.addEventListener('click', () => { ($('#filter') as HTMLInputElement).value = ''; render(); });
+      return;
+    }
+    const gs = groups(ds);
+    const single = gs.length === 1 && Array.isArray(sel) && sameSel(gs[0]!.path, sel);
+    list.innerHTML = gs.map((g) => `<section class="mb-5">${single ? '' : groupHead(g.path, g.items.length)}${view === 'grid'
+      ? `<div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 min-[1800px]:grid-cols-4 gap-3">${g.items.map(card).join('')}</div>`
+      : `<div class="panel overflow-x-auto"><table class="w-full text-[12.5px]">
+          <thead><tr class="text-[11px] uppercase tracking-wider text-ink-500 text-left"><th class="w-8 pl-3 py-1.5"><span class="sr-only">Select</span></th>
+            <th class="py-1.5 pr-3 font-semibold">Title</th><th class="px-2 font-semibold">Type</th><th class="px-2 text-right font-semibold">Tables</th>
+            <th class="px-2 text-right font-semibold">Valid</th><th class="px-2 text-right font-semibold">Pages</th><th class="px-2 font-semibold">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>${g.items.map(row).join('')}</tbody></table></div>`}</section>`).join('');
+  }
+
+  function renderCrumbs() {
+    const c = $('#crumbs');
+    const parts: string[] = [`<button data-go="all" class="hover:underline ${sel === null ? 'text-ink-900 font-semibold' : ''}">All Documents</button>`];
+    if (sel === 'uncat') parts.push(`<span class="text-ink-900 font-semibold">${UNCAT}</span>`);
+    else if (Array.isArray(sel)) sel.forEach((p, i) => parts.push(i === sel!.length - 1
+      ? `<span class="text-ink-900 font-semibold">${esc(p)}</span>`
+      : `<button data-go="${esc(pathKey((sel as string[]).slice(0, i + 1)))}" class="hover:underline">${esc(p)}</button>`));
+    c.innerHTML = parts.join(`<span class="text-ink-300" aria-hidden="true">${icon('right', 'size-3.5')}</span>`);
+  }
+
+  function renderYears() {
+    const counts = new Map<string, number>();
+    for (const d of docs) if (inSel(d)) { const y = docYear(d) ?? 'none'; counts.set(y, (counts.get(y) ?? 0) + 1); }
+    if (year && !counts.has(year)) counts.set(year, 0);
+    const ys = [...counts.keys()].filter((y) => y !== 'none').sort((a, b) => b.localeCompare(a));
+    const n = [...counts.values()].reduce((a, b) => a + b, 0);
+    $<HTMLSelectElement>('#year').innerHTML = `<option value="">All years (${n})</option>`
+      + ys.map((y) => `<option value="${y}">${y} (${counts.get(y)})</option>`).join('')
+      + (counts.has('none') ? `<option value="none">No year (${counts.get('none')})</option>` : '');
+    $<HTMLSelectElement>('#year').value = year;
+  }
+  $('#year').addEventListener('change', () => { year = $<HTMLSelectElement>('#year').value; picked.clear(); writeUrl(); render(); });
+
+  function renderSel() {
+    const bar = $('#selbar');
+    bar.classList.toggle('hidden', !picked.size);
+    bar.classList.toggle('flex', picked.size > 0);
+    $('#selcount').textContent = `${picked.size} selected`;
+  }
+
+  function render() {
+    // a category that no longer exists (moved / renamed elsewhere) falls back to "All"
+    if (Array.isArray(sel) && !docs.some((d) => isUnder(cat(d), sel as string[]))) sel = null;
+    for (const id of picked) if (!docs.some((d) => d.id === id)) picked.delete(id);
+    // the tree counts follow the year filter; the year counts follow the open category
+    root = buildTree(docs.filter(yearOk).map((d) => ({ category: cat(d) })));
+    renderYears();
+    $$<HTMLElement>('[data-view]').forEach((b) => { const on = b.dataset.view === view; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('!bg-ink-100', on); });
+    renderTree(); renderCrumbs(); renderList(); renderSel();
+  }
+
+  async function load() {
+    try {
+      docs = await api.documents();
+      root = buildTree(docs.map((d) => ({ category: cat(d) })));
+      render();
+      if (docs.some((d) => d.last_job_status === 'running' || d.last_job_status === 'queued')) setTimeout(load, 2000);
+    } catch (e: any) {
+      list.innerHTML = `<div class="panel p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p>
+        <button id="reload" class="btn-primary mt-3">Retry</button></div>`;
+      $('#reload').addEventListener('click', load);
+    }
+  }
+
+  // ------------------------------------------------------------ upload (into the selected category)
+  async function uploadOne(f: File, extract: boolean): Promise<Doc | null> {
+    const ph = document.createElement('div');
+    ph.className = 'panel p-4 mb-3 flex flex-col gap-lg text-[13px] text-ink-700';
+    ph.setAttribute('role', 'status');
+    ph.innerHTML = `<div class="flex items-center gap-lg">${icon('spinner', 'size-4 text-brand-600')}<span class="flex-1 min-w-0 truncate">Uploading <b class="text-ink-900">${esc(f.name)}</b></span>
+      <span data-pct class="tabular-nums text-ink-600">0 of ${fmtBytes(f.size)}</span></div>
+      <div class="h-1 bg-ink-100"><div data-bar class="h-full bg-brand-500 transition-[width]" style="width:0%"></div></div>`;
+    list.classList.remove('hidden'); empty.classList.add('hidden');
+    list.prepend(ph);
+    try {
+      const r = await api.upload(f, extract, 'auto', (done, total) => {
+        ph.querySelector<HTMLElement>('[data-bar]')!.style.width = `${(100 * done) / total}%`;
+        ph.querySelector('[data-pct]')!.textContent = done >= total ? 'Reading the PDF…' : `${fmtBytes(done)} of ${fmtBytes(total)}`;
+      });
+      // dropped while a category is open: file it there
+      if (Array.isArray(sel) && !r.document.category?.length) await api.setCategory(r.document.id, sel);
+      return r.document;
+    } catch (e: any) {
+      toast(`${f.name} was not uploaded: ${e.message}`, 'error', { action: { label: 'Retry', run: () => upload([f]) } });
+      return null;
+    } finally { ph.remove(); }
+  }
+
+  async function upload(files: FileList | File[]) {
+    const all = [...files];
+    const pdfs = all.filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    if (!pdfs.length) return toast('Only PDF files can be uploaded.', 'error', { action: { label: 'Choose Files', run: () => $<HTMLInputElement>('#file').click() } });
+    if (pdfs.length < all.length) toast(`${plural(all.length - pdfs.length, 'file')} skipped: not a PDF.`, 'info');
+    const extract = ($('#auto') as HTMLInputElement).checked;
+    let last: Doc | null = null;
+    for (const f of pdfs) last = (await uploadOne(f, extract)) ?? last;
+    if (pdfs.length === 1 && last) location.href = `/doc?id=${last.id}`;
+    else load();
+  }
+
+  for (const b of ['#pick', '#pick2']) $(b).addEventListener('click', () => $<HTMLInputElement>('#file').click());
+  $('#file').addEventListener('change', (e) => { const i = e.target as HTMLInputElement; if (i.files) upload(i.files); i.value = ''; });
+
+  // ------------------------------------------------------------ drag: PDF files from the OS = upload; documents onto the tree = move
+  const DOC_MIME = 'application/x-tabel-docs';
+  const drop = $('#drop');
+  const isFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
+  const isDocs = (e: DragEvent) => !!e.dataTransfer?.types.includes(DOC_MIME);
+  addEventListener('dragover', (e) => { if (isFiles(e)) { e.preventDefault(); drop.classList.add('!border-brand-500', '!bg-brand-50'); } });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('!border-brand-500', '!bg-brand-50'); });
+  addEventListener('drop', (e) => {
+    if (!isFiles(e)) return;
+    e.preventDefault(); drop.classList.remove('!border-brand-500', '!bg-brand-50');
+    if (e.dataTransfer?.files.length) upload(e.dataTransfer.files);
+  });
+  list.addEventListener('dragstart', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
+    if (!el || !e.dataTransfer) return;
+    const id = el.dataset.doc!;
+    const ids = picked.has(id) ? [...picked] : [id];
+    e.dataTransfer.setData(DOC_MIME, JSON.stringify(ids));
+    e.dataTransfer.setData('text/plain', ids.length > 1 ? `${ids.length} documents` : docs.find((d) => d.id === id)?.title ?? '');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  const dropTarget = (e: DragEvent) => (e.target as HTMLElement).closest<HTMLElement>('[data-node]:not([data-node="all"])');
+  tree.addEventListener('dragover', (e) => {
+    const n = dropTarget(e);
+    if (!n || !isDocs(e)) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'move';
+    $$('[data-node].drop-on', tree).forEach((x) => x !== n && x.classList.remove('drop-on', '!bg-brand-100'));
+    n.classList.add('drop-on', '!bg-brand-100');
+  });
+  tree.addEventListener('dragleave', (e) => { const n = dropTarget(e); if (n && !n.contains(e.relatedTarget as Node)) n.classList.remove('drop-on', '!bg-brand-100'); });
+  tree.addEventListener('drop', (e) => {
+    const n = dropTarget(e);
+    if (!n || !isDocs(e)) return;
+    e.preventDefault();
+    n.classList.remove('drop-on', '!bg-brand-100');
+    const ids = JSON.parse(e.dataTransfer!.getData(DOC_MIME) || '[]') as string[];
+    const s = nodeSel(n);
+    moveDocs(ids, s === 'uncat' ? [] : (s as string[]));
+  });
+
+  // ------------------------------------------------------------ list actions
+  $('#filter').addEventListener('input', debounce(render, 120));
+  $$<HTMLElement>('[data-view]').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view as 'grid' | 'list'; localStorage.setItem('lib-view', view); render(); }));
+  $('#crumbs').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-go]');
+    if (b) select(b.dataset.go === 'all' ? null : JSON.parse(b.dataset.go!));
+  });
+  $('#sel-move').addEventListener('click', () => moveDocs([...picked]));
+  $('#sel-clear').addEventListener('click', () => { picked.clear(); render(); });
+
+  list.addEventListener('change', (e) => {
+    const c = (e.target as HTMLElement).closest<HTMLInputElement>('[data-pick]');
+    if (!c) return;
+    c.checked ? picked.add(c.dataset.pick!) : picked.delete(c.dataset.pick!);
+    renderList(); renderSel();
+  });
+
+  // delete = deferred (soft) delete with Undo, no confirmation dialog
+  async function del(d: Doc) {
+    try {
+      await api.deleteDocument(d.id);
+      docs = docs.filter((x) => x.id !== d.id);
+      picked.delete(d.id);
+      root = buildTree(docs.map((x) => ({ category: cat(x) })));
+      render();
+      toast(`Deleted “${d.title.slice(0, 60)}”`, 'info', { action: { label: 'Undo', run: async () => { await api.restoreDocument(d.id); await load(); } } });
+    } catch (er) { toastError(er); }
+  }
+
+  list.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const go = t.closest<HTMLElement>('[data-go]');
+    if (go) return select(go.dataset.go === 'uncat' ? 'uncat' : JSON.parse(go.dataset.go!));
+    const mv = t.closest<HTMLElement>('[data-move]');
+    if (mv) return void moveDocs(picked.has(mv.dataset.move!) ? [...picked] : [mv.dataset.move!]);
+    const b = t.closest<HTMLElement>('[data-del]');
+    if (b) { const d = docs.find((x) => x.id === b.dataset.del); if (d) del(d); }
+  });
+
+  function docMenu(at: MouseEvent | HTMLElement, id: string) {
+    const d = docs.find((x) => x.id === id);
+    if (!d) return;
+    const many = picked.has(id) && picked.size > 1;
+    contextMenu(at, [
+      { heading: many ? `${picked.size} documents` : d.title },
+      ...(many ? [] : [{ label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) }]),
+      { label: many ? `Move ${picked.size} Documents to Category…` : 'Move to Category…', icon: 'folder', action: () => moveDocs(many ? [...picked] : [id]) },
+      ...(!many && cat(d).length ? [{ label: `Show “${cat(d).at(-1)}”`, icon: 'folderOpen', action: () => select(cat(d)) }] : []),
+      ...(!many && d.source === 'bps' ? [{ label: 'Automatic Category (BPS Subject)', icon: 'wand', action: () => moveDocs([id], 'auto') }] : []),
+      'sep',
+      ...(many ? [] : [{ label: 'Delete Document', icon: 'trash', danger: true, action: () => del(d) }]),
+    ]);
+  }
+  list.addEventListener('contextmenu', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
+    if (el) docMenu(e, el.dataset.doc!);
+  });
+  list.addEventListener('keydown', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
+    if (el && isMenuKey(e)) { e.preventDefault(); docMenu(el, el.dataset.doc!); }
+  });
+
+  addEventListener('popstate', () => { readUrl(); render(); });
+  readUrl();
+  load();
+</script>

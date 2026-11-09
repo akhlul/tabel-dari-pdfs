@@ -1,0 +1,19 @@
+# never in the image: secrets and the library data
+.env
+.env.*
+!.env.example
+data/
+**/backups/
+
+.git/
+.idea/
+.DS_Store
+
+# rebuilt inside the image
+backend/.venv/
+backend/.ruff_cache/
+**/__pycache__/
+*.pyc
+frontend/node_modules/
+frontend/dist/
+frontend/.astro/

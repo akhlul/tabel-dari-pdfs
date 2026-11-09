@@ -1,0 +1,1035 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout title="Workspace" active="doc" full>
+  <h1 id="doc-h1" class="sr-only">Document</h1>
+  <!-- document toolbar -->
+  <div class="min-h-12 py-1.5 shrink-0 bg-surface border-b border-ink-200 flex flex-wrap items-center gap-lg px-3" role="toolbar" aria-label="Document">
+    <a href="/" class="btn-ghost btn-sm btn-icon" title="Back to library"><Icon name="left" /></a>
+    <div class="min-w-72 flex-1 flex items-center gap-lg">
+      <span id="kind" class="chip border-ink-200 text-ink-600 bg-ink-50 shrink-0"></span>
+      <input id="title" aria-label="Document title" title="Document title (click to rename)" class="min-w-0 flex-1 text-[14px] font-semibold text-ink-900 bg-transparent border border-transparent
+        hover:border-ink-200 focus:border-brand-500 focus:bg-surface focus:outline-none px-1.5 h-8 truncate" />
+      <span id="meta" class="text-[12px] text-ink-500 whitespace-nowrap hidden xl:inline"></span>
+    </div>
+    <div class="toolbar">
+      <div class="flex items-center border border-ink-200 h-8 bg-surface">
+        <select id="engine" aria-label="Extraction method" class="h-full px-2 text-[13px] bg-transparent border-r border-ink-200 focus:outline-none"></select>
+        <input id="pages" aria-label="Pages to extract" class="h-full w-24 px-2 text-[13px] bg-transparent focus:outline-none" placeholder="All pages" title="Pages to extract, for example 1–5, 9" />
+      </div>
+      <button id="run" class="btn-primary"><Icon name="play" class="size-3.5" />Get All Tables</button>
+      <div class="relative" data-menu>
+        <button class="btn-line" data-menu-toggle title="Change the arrangement of PDF, table list and editor"><Icon name="grid" />Layout<Icon name="chevron" class="size-3.5" /></button>
+        <div id="layoutmenu" class="menu hidden right-0 w-80"></div>
+      </div>
+      <div class="relative" data-menu>
+        <button class="btn-line" data-menu-toggle><Icon name="download" />Export<Icon name="chevron" class="size-3.5" /></button>
+        <div class="menu hidden right-0 w-80">
+          <div class="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Tables in this document</div>
+          <div class="px-3 pb-2 flex flex-col gap-sm text-[12.5px] text-ink-700" data-keep-open role="radiogroup" aria-label="Which tables">
+            <label class="flex items-center gap-lg"><input type="radio" name="include" value="usable" checked class="accent-brand-700" />All except deleted and “not a table”</label>
+            <label class="flex items-center gap-lg"><input type="radio" name="include" value="valid" class="accent-brand-700" />Only tables flagged valid</label>
+          </div>
+          <div class="border-t border-ink-100 pt-1"></div>
+          <button id="ex-xlsx" class="menu-item"><Icon name="table" class="size-4 text-emerald-700" />Excel Workbook (.xlsx)<span class="ml-auto text-[11px] text-ink-500">one sheet per table</span></button>
+          <button id="ex-zip" class="menu-item"><Icon name="file" class="size-4 text-ink-500" />CSV Files (.zip)</button>
+          <button id="ex-json" class="menu-item"><Icon name="file" class="size-4 text-brand-600" />JSON</button>
+          <div class="border-t border-ink-100 mt-1 px-3 py-2 text-[12px] text-ink-600 flex items-center gap-lg" data-keep-open>
+            <label for="decimal">Decimal separator:</label>
+            <select id="decimal" class="field h-6 text-[12px] px-1" title="Auto uses each table's own setting (detected from its numbers unless chosen in the editor)"><option value="auto">Auto (per table)</option><option value=",">1.234,5 (Indonesian)</option><option value=".">1,234.5 (English)</option></select>
+          </div>
+          <label class="px-3 pb-2 flex items-center gap-lg text-[12px] text-ink-600" data-keep-open title="By default each sheet (s001, s002, …) holds only the table; titles are listed on the Index sheet">
+            <input id="ex-title" type="checkbox" class="accent-brand-700" />Write the title above each table</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- job progress (determinate, cancellable) -->
+  <div id="jobbar" class="hidden shrink-0 border-b border-ink-200 bg-brand-50" role="status" aria-live="polite">
+    <div class="h-1 bg-brand-100"><div id="jobfill" class="h-full bg-brand-500 transition-[width] duration-300" style="width:0%"></div></div>
+    <div class="flex items-center gap-lg px-4 h-8 text-[12.5px] text-ink-800">
+      <Icon name="spinner" class="size-3.5 text-brand-600" />
+      <span id="jobtext">Starting…</span>
+      <button id="jobcancel" class="ml-auto btn-ghost btn-sm"><Icon name="stop" class="size-3" />Cancel</button>
+    </div>
+  </div>
+
+  <!-- panes are arranged by lib/layout.ts inside #work -->
+  <div id="work" class="flex-1 min-h-0 flex"></div>
+  <div id="panes" class="hidden">
+  <div id="paneA" class="flex-1 min-w-0 min-h-0 flex" role="region" aria-label="PDF">
+    <nav id="rail" aria-label="Pages" class="w-14 shrink-0 border-r border-ink-200 bg-surface overflow-y-auto py-1 text-[11.5px]"></nav>
+    <section class="@container flex-1 min-w-0 flex flex-col bg-ink-100">
+      <div class="h-10 shrink-0 flex items-center gap-md px-2 border-b border-ink-200 bg-surface overflow-hidden" role="toolbar" aria-label="PDF view">
+        <button id="zout" class="btn-ghost btn-sm btn-icon" title="Zoom out (-)"><Icon name="zoomout" /></button>
+        <button id="zlabel" class="btn-ghost btn-sm w-14 tabular-nums" title="Fit to width">100%</button>
+        <button id="zin" class="btn-ghost btn-sm btn-icon" title="Zoom in (+)"><Icon name="zoomin" /></button>
+        <span class="w-px h-5 bg-ink-200 mx-1" role="separator"></span>
+        <label class="text-[12px] text-ink-600 flex items-center gap-sm whitespace-nowrap">Page:
+          <input id="pgin" class="field h-6 w-12 px-1 text-center text-[12px]" value="1" />
+          <span id="pgcount">of –</span></label>
+        <span class="w-px h-5 bg-ink-200 mx-1" role="separator"></span>
+        <button id="draw" class="btn-line btn-sm" title="Drag a rectangle over a table to extract only that area (R)"><Icon name="crop" class="size-3.5" /><span id="drawlabel">Draw Table Area</span></button>
+        <button id="seltext" class="btn-ghost btn-sm" title="Select and copy text, also inside table areas (T)"><Icon name="textCursor" class="size-3.5" /><span id="seltextlabel" class="hidden @2xl:inline">Select Text</span></button>
+        <button id="pagex" class="btn-ghost btn-sm" title="Run extraction again on the page shown"><Icon name="reset" class="size-3.5" /><span class="hidden @3xl:inline">Extract This Page</span><span class="@3xl:hidden">This Page</span></button>
+        <label class="ml-auto flex items-center gap-md text-[12px] text-ink-600 pr-1 whitespace-nowrap" title="Show the table areas on the PDF">
+          <input id="boxes" type="checkbox" checked class="accent-brand-700" aria-label="Show areas" /><span class="hidden @2xl:inline">Show areas</span>
+        </label>
+      </div>
+      <div id="drawhint" role="status" class="hidden shrink-0 bg-brand-600 text-white text-[12px] px-3 h-7 flex items-center gap-lg">
+        <Icon name="crop" class="size-3.5" />Drag a rectangle around a table. Everything inside becomes one table. Press Esc to stop.
+      </div>
+      <div id="scroller" class="relative flex-1 min-h-0 overflow-auto">
+        <div id="pdfhost" class="relative flex flex-col items-center py-6 px-12"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="paneB" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table list">
+      <div class="h-10 shrink-0 flex items-center gap-md px-3 border-b border-ink-200">
+        <span class="text-[12px] font-semibold uppercase tracking-wider text-ink-500" id="tlist-label">Tables</span>
+        <span id="tcount" class="chip border-ink-200 text-ink-700 bg-ink-50">0</span>
+        <div class="relative" data-menu>
+          <button class="btn-line btn-sm" data-menu-toggle title="Which tables to list"><Icon name="filter" class="size-3.5" /><span id="flabel">Filter</span><Icon name="chevron" class="size-3" /></button>
+          <div id="fmenu" class="menu hidden left-0 w-64 py-2" data-keep-open></div>
+        </div>
+        <button id="addtable" class="ml-auto btn-ghost btn-sm" title="Add an empty table on the page shown" aria-label="Add Empty Table"><Icon name="plus" class="size-3.5" /><span class="hidden @sm:inline">Add Empty Table</span></button>
+      </div>
+      <div id="tlist" role="listbox" aria-multiselectable="true" aria-labelledby="tlist-label" tabindex="0"
+        class="@container flex-1 min-h-0 overflow-y-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"></div>
+  </div>
+
+  <div id="paneC" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table editor">
+      <div id="tbar" class="hidden shrink-0 flex flex-wrap items-center gap-md px-2 py-1.5 border-b border-ink-200 bg-surface" role="toolbar" aria-label="Table">
+        <div class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
+          <label class="flag-opt" title="No decision yet"><input type="radio" name="flag" value="none" class="sr-only" />Unflagged</label>
+          <label class="flag-opt" title="A real table, keep it (V)"><input type="radio" name="flag" value="valid" class="sr-only" /><Icon name="flagOk" class="size-3.5" />Valid</label>
+          <label class="flag-opt" title="Not a table, e.g. a chart or a text box (X)"><input type="radio" name="flag" value="invalid" class="sr-only" /><Icon name="flagNo" class="size-3.5" />Not a Table</label>
+        </div>
+        <span id="tbadge" class="text-[11.5px] text-ink-500 px-1"></span>
+        <span id="savestate" role="status" class="text-[11.5px] text-ink-500 flex items-center gap-sm"></span>
+        <div class="ml-auto toolbar">
+          <div class="relative" data-menu>
+            <button class="btn-ghost btn-sm" data-menu-toggle title="Join a continuation, e.g. the same table on the next page"><Icon name="rowBelow" class="size-3.5" />Join<Icon name="chevron" class="size-3" /></button>
+            <div id="joinmenu" class="menu hidden right-0 w-96"></div>
+          </div>
+          <div class="relative" data-menu>
+            <button class="btn-ghost btn-sm" data-menu-toggle><Icon name="layers" class="size-3.5" />More<Icon name="chevron" class="size-3" /></button>
+            <div class="menu hidden right-0 w-72">
+              <button id="tcopy" class="menu-item"><Icon name="copy" class="size-4 text-ink-500" />Copy for Spreadsheet</button>
+              <div class="border-t border-ink-100 my-1"></div>
+              <button id="tx-xlsx" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download Excel (.xlsx)</button>
+              <button id="tx-csv" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download CSV (.csv)</button>
+              <button id="tx-json" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download JSON (.json)</button>
+              <div class="border-t border-ink-100 my-1"></div>
+              <button id="trextract" class="menu-item"><Icon name="target" class="size-4 text-ink-500" />Extract Area Again</button>
+              <button id="treset" class="menu-item"><Icon name="reset" class="size-4 text-ink-500" />Reset to Extracted Version</button>
+            </div>
+          </div>
+          <button id="tdel" class="btn-ghost btn-sm" title="Mark as deleted; can be undone (Del)"><Icon name="trash" class="size-3.5" />Delete</button>
+        </div>
+      </div>
+      <div id="tdeleted" role="status" class="hidden shrink-0 flex items-center gap-lg px-3 h-9 bg-red-50 border-b border-red-200 text-[12.5px] text-red-800">
+        <Icon name="trash" class="size-3.5" />Marked as deleted: hidden from exports and the Tables page.
+        <button id="trestore" class="ml-auto btn-line btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
+        <button id="tpurge" class="btn-sm btn bg-red-700 border-red-700 text-white hover:bg-red-800">Delete Permanently…</button>
+      </div>
+      <div id="tjoin" class="hidden shrink-0 flex flex-wrap items-center gap-lg px-3 py-1.5 bg-brand-50 border-b border-brand-100 text-[12.5px] text-ink-800"></div>
+      <div id="editor" class="flex-1 min-h-0"></div>
+  </div>
+  </div>
+</Layout>
+
+<script>
+  import { api, ENGINE_NAME, type BBox, type Doc, type Engine, type Job, type State, type Table, type TablePatch } from '../lib/api';
+  import { PdfViewer } from '../lib/viewer';
+  import { TableEditor, type EditorChange } from '../lib/editor';
+  import { $, esc, toast, toastError, plural, fmtBytes, fmtDate, parsePages, debounce, confirmDialog, initMenus, KIND_LABEL, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { Layout, LAYOUTS } from '../lib/layout';
+  import { getSettings } from '../lib/settings';
+
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (!id) location.href = '/';
+  initMenus();
+  { // export defaults from the local settings
+    const st = getSettings();
+    $<HTMLSelectElement>('#decimal').value = st.decimal;
+    $<HTMLInputElement>('#ex-title').checked = st.exportTitle;
+  }
+
+  let doc: Doc;
+  let tables: Table[] = [];
+  let selected: string | null = null;
+  let engines: Engine[] = [];
+  let job: Job | null = null;
+
+  // ------------------------------------------------------------ list filter (persisted)
+  const STATE_LABEL: Record<State, string> = { none: 'Unflagged', valid: 'Valid', invalid: 'Not a table', deleted: 'Deleted' };
+  const FKEY = 'tdp.docfilter';
+  const filt: { states: State[]; edited: boolean; page: boolean } =
+    JSON.parse(localStorage.getItem(FKEY) ?? 'null') ?? { states: ['none', 'valid', 'invalid'], edited: false, page: false };
+  const stateOf = (t: Table): State => (t.deleted ? 'deleted' : t.status);
+  const shown = (t: Table) => filt.states.includes(stateOf(t)) && (!filt.edited || t.edited) && (!filt.page || t.page === viewer.current);
+
+  const viewer = new PdfViewer($('#scroller'), $('#pdfhost'), {
+    onSelect: (tid) => select(tid, false),
+    onRegion: (page, bbox) => extractRegion(page, bbox),
+    onBoxChange: (tid, bbox) => boxChanged(tid, bbox),
+    onPart: (tid, k) => revealPart(tid, k),
+    onPage: (p) => { $<HTMLInputElement>('#pgin').value = String(p); markRail(); layout?.refreshTabs(); saveDocState(); if (filt.page) renderList(); },
+  });
+  const layout = new Layout($('#work'), { A: $('#paneA'), B: $('#paneB'), C: $('#paneC') }, (p) => {
+    if (p === 'A') return `PDF${doc ? ` · p${viewer.current}` : ''}`;
+    if (p === 'B') return `Tables (${tables.filter((t) => !t.deleted).length})`;
+    const t = tables.find((x) => x.id === selected);
+    return t ? `Editor · ${label(t)}` : 'Editor';
+  }, () => renderLayoutMenu());
+  function renderLayoutMenu() {
+    const eff = layout.effective();
+    $('#layoutmenu').innerHTML = `<div class="px-3 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">a = PDF, b = table list, c = editor</div>`
+      + LAYOUTS.map((l) => `<button data-layout="${l.id}" role="menuitemradio" aria-checked="${l.id === layout.id}" class="menu-item ${l.id === layout.id ? 'font-semibold' : ''}">
+        <span class="w-4">${l.id === layout.id ? icon('check', 'size-3.5 text-brand-600') : ''}</span>
+        <span class="flex-1">${l.label}</span><span class="font-mono text-[11px] text-ink-500">${l.hint}</span></button>`).join('')
+      + (eff !== layout.id ? `<div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11.5px] text-ink-700">The window is narrow, so “${LAYOUTS.find((l) => l.id === eff)!.label}” is used until it is wider.</div>` : '')
+      + `<div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-500">Drag a divider to resize it. Double-click a divider to reset it. Alt+1, 2, 3 jump to the PDF, list and editor.</div>`;
+  }
+  $('#layoutmenu').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-layout]');
+    if (!b) return;
+    $('#layoutmenu').classList.add('hidden');
+    layout.apply(b.dataset.layout!);
+  });
+  layout.apply();
+
+  // joined tables: jump the editor to the rows that came from one page
+  let pendingReveal: { id: string; page: number } | null = null;
+  function revealPart(tid: string, k: number) {
+    const t = tables.find((x) => x.id === tid);
+    if (!t) return;
+    const page = k < 0 ? t.page : t.parts[k]!.page;
+    if (selected !== tid) { picked.clear(); picked.add(tid); select(tid, false); }
+    pendingReveal = { id: tid, page };
+    layout.focus('C');
+    requestAnimationFrame(() => editor.reveal(page));
+  }
+
+  viewer.isShown = (t) => filt.states.includes(stateOf(t)) && (!filt.edited || t.edited);
+
+  function renderFilterMenu() {
+    const counts = (s: State) => tables.filter((t) => stateOf(t) === s).length;
+    $('#fmenu').innerHTML = `
+      <div class="px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Show tables that are</div>
+      ${(['none', 'valid', 'invalid', 'deleted'] as State[]).map((s) => `
+        <label class="flex items-center gap-2 px-3 h-7 text-[12.5px] hover:bg-ink-50">
+          <input type="checkbox" data-state="${s}" ${filt.states.includes(s) ? 'checked' : ''} class="accent-brand-700" />
+          ${stateIcon(s, true)}${STATE_LABEL[s]}<span class="ml-auto text-[11px] text-ink-400 tabular-nums">${counts(s)}</span></label>`).join('')}
+      <div class="border-t border-ink-100 my-1"></div>
+      <label class="flex items-center gap-2 px-3 h-7 text-[12.5px] hover:bg-ink-50">
+        <input type="checkbox" data-f="edited" ${filt.edited ? 'checked' : ''} class="accent-brand-700" />Edited only
+        <span class="ml-auto text-[11px] text-ink-400 tabular-nums">${tables.filter((t) => t.edited).length}</span></label>
+      <label class="flex items-center gap-2 px-3 h-7 text-[12.5px] hover:bg-ink-50">
+        <input type="checkbox" data-f="page" ${filt.page ? 'checked' : ''} class="accent-brand-700" />On the page shown only</label>`;
+    const n = filt.states.length;
+    $('#flabel').textContent = n === 4 ? 'All' : n === 3 && !filt.states.includes('deleted') ? 'Not Deleted' : filt.states.map((s) => STATE_LABEL[s]).join(', ') || 'None';
+    if (filt.edited) $('#flabel').textContent += ' · Edited';
+  }
+  $('#fmenu').addEventListener('change', (e) => {
+    const i = e.target as HTMLInputElement;
+    if (i.dataset.state) {
+      const s = i.dataset.state as State;
+      filt.states = i.checked ? [...new Set([...filt.states, s])] : filt.states.filter((x) => x !== s);
+    } else if (i.dataset.f === 'edited') filt.edited = i.checked;
+    else if (i.dataset.f === 'page') filt.page = i.checked;
+    localStorage.setItem(FKEY, JSON.stringify(filt));
+    refresh();
+  });
+  /** flag shown as icon + accessible text, never color alone */
+  const stateIcon = (s: State, showNone = false) =>
+    s === 'valid' ? `<span class="shrink-0 text-emerald-600" role="img" aria-label="Valid">${icon('flagOk', 'size-3.5')}</span>`
+    : s === 'invalid' ? `<span class="shrink-0 text-ink-400" role="img" aria-label="Not a table">${icon('flagNo', 'size-3.5')}</span>`
+    : s === 'deleted' ? `<span class="shrink-0 text-red-600" role="img" aria-label="Deleted">${icon('trash', 'size-3.5')}</span>`
+    : showNone ? `<span class="shrink-0 text-ink-300" role="img" aria-label="Unflagged">${icon('dot', 'size-3.5')}</span>` : '<span class="w-3.5 shrink-0"></span>';
+
+  // ------------------------------------------------------------ saving
+  const pending = new Map<string, TablePatch>();
+  const setSave = (s: 'saving' | 'saved' | 'error' | '', tid?: string) => {
+    $('#savestate').innerHTML = s === 'saving' ? `${icon('spinner', 'size-3')}Saving…`
+      : s === 'saved' ? `${icon('check', 'size-3 text-emerald-600')}All changes saved`
+      : s === 'error' ? `<span class="text-red-700 font-medium">Changes not saved</span><button data-retry="${tid}" class="btn-line btn-sm !h-6">Retry</button>` : '';
+  };
+  $('#savestate').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-retry]'); if (b) flush(b.dataset.retry!); });
+  async function flush(tid: string) {
+    const p = pending.get(tid);
+    if (!p) return;
+    pending.delete(tid);
+    setSave('saving');
+    try {
+      const t = await api.patchTable(tid, p);
+      replaceTable(t, false);
+      setSave('saved');
+    } catch (e: any) {
+      pending.set(tid, { ...p, ...pending.get(tid) }); // keep the edits for the retry
+      setSave('error', tid);
+      toastError(new Error(`Changes were not saved: ${e.message}`), () => flush(tid));
+    }
+  }
+  const saveSoon = debounce((tid: string) => flush(tid), 600);
+  function queue(tid: string, patch: TablePatch, now = false) {
+    const prev = pending.get(tid) ?? {};
+    pending.set(tid, { ...prev, ...patch, checkpoint: !!(prev.checkpoint || patch.checkpoint) });
+    setSave('saving');
+    if (now) { saveSoon.cancel(); return flush(tid); }
+    saveSoon(tid);
+  }
+
+  const editor = new TableEditor($('#editor'), (c: EditorChange) => {
+    if (!selected) return;
+    const t = tables.find((x) => x.id === selected)!;
+    if (c.rows) t.rows = c.rows.map((r) => [...r]);
+    if (c.merges) t.merges = c.merges.map((m) => [...m] as typeof m);
+    if (c.header_rows !== undefined) t.header_rows = c.header_rows;
+    if (c.title !== undefined) t.title = c.title;
+    if (c.notes !== undefined) t.notes = c.notes;
+    if (c.decimal_sep !== undefined) t.decimal_sep = c.decimal_sep;
+    const patch: TablePatch = { checkpoint: c.checkpoint };
+    if (c.decimal_sep !== undefined) patch.decimal_sep = c.decimal_sep;
+    if (c.rows) patch.rows = t.rows;
+    if (c.merges) patch.merges = t.merges;
+    if (c.header_rows !== undefined) patch.header_rows = c.header_rows;
+    if (c.title !== undefined) { patch.title = c.title; renderList(); }
+    if (c.notes !== undefined) patch.notes = c.notes;
+    queue(selected, patch, !!c.checkpoint);
+  });
+  editor.onShowPage = (page) => {
+    const t = tables.find((x) => x.id === selected);
+    if (!t) return;
+    const part = t.parts?.find((p) => p.page === page);
+    layout.focus('A');
+    viewer.scrollToTable(part ? { ...t, page, bbox: part.bbox } : t);
+  };
+  window.addEventListener('beforeunload', (e) => { if (pending.size) { pending.forEach((_, k) => flush(k)); e.preventDefault(); } });
+
+  function replaceTable(t: Table, rerenderEditor = true) {
+    const i = tables.findIndex((x) => x.id === t.id);
+    if (i >= 0) {
+      if (pending.has(t.id)) { t.rows = tables[i]!.rows; t.merges = tables[i]!.merges; } // typed after this save was sent
+      tables[i] = t;
+    } else tables.push(t);
+    tables.sort((a, b) => a.page - b.page || a.idx - b.idx);
+    refresh();
+    if (t.id === selected) { renderBar(t); if (rerenderEditor) openEditor(t); }
+  }
+
+  // ------------------------------------------------------------ rendering
+  function refresh() {
+    viewer.setTables(tables);
+    viewer.setActive(selected);
+    renderList();
+    renderRail();
+    renderFilterMenu();
+    $('#tcount').textContent = String(tables.filter((t) => !t.deleted).length);
+    layout.refreshTabs();
+  }
+
+  // multi-selection in the list (click / Ctrl-click / Shift-click), separate from the table open in the editor
+  const picked = new Set<string>();
+  let anchorId: string | null = null;
+  let focusId: string | null = null; // keyboard cursor in the list (aria-activedescendant)
+  const expanded = new Set<string>(JSON.parse(localStorage.getItem('tdp.expanded') ?? '[]'));
+  const saveExpanded = () => localStorage.setItem('tdp.expanded', JSON.stringify([...expanded].slice(-200)));
+  const visible = () => tables.filter(shown);
+
+  function renderList() {
+    for (const id of [...picked]) if (!tables.some((t) => t.id === id)) picked.delete(id);
+    const list = visible();
+    $('#tlist').innerHTML = list.map((t) => {
+      const idx = tables.filter((x) => x.page === t.page).indexOf(t) + 1;
+      const w = Math.max(0, ...t.rows.map((r) => r.length));
+      const s = stateOf(t);
+      const parts = t.parts ?? [];
+      const open = expanded.has(t.id);
+      const isSel = t.id === selected, isPicked = picked.has(t.id) && picked.size > 1;
+      const inSel = picked.has(t.id) || isSel;
+      const row = `<div role="option" id="row-${t.id}" aria-selected="${inSel}" data-t="${t.id}" aria-label="${esc(`${label(t)}, ${t.title || 'untitled table'}, ${STATE_LABEL[s]}${t.edited ? ', edited' : ''}${parts.length ? `, joined pages ${t.page} to ${lastPage(t)}` : ''}`)}"
+          class="w-full text-left flex items-center gap-md pl-1.5 pr-3 min-h-9 py-1 border-b border-ink-100 text-[12.5px] select-none
+          ${isSel ? 'bg-brand-100 shadow-[inset_3px_0_0_var(--color-brand-600)]' : isPicked ? 'bg-brand-50 shadow-[inset_3px_0_0_var(--color-brand-300)]' : 'hover:bg-ink-50'}
+          ${t.id === focusId ? 'row-focus' : ''} ${s === 'deleted' || s === 'invalid' ? 'text-ink-500' : ''}">
+        ${parts.length ? `<span data-caret="${t.id}" aria-hidden="true" class="w-4 h-6 grid place-items-center text-ink-500 hover:text-ink-900" title="${open ? 'Hide the joined parts' : 'Show the joined parts'} (→ / ←)">${icon(open ? 'chevron' : 'right', 'size-3.5')}</span>` : '<span class="w-4"></span>'}
+        ${stateIcon(s)}
+        <span class="w-12 shrink-0 text-[11px] font-semibold text-ink-500 tabular-nums">p${t.page}·T${idx}</span>
+        <span class="flex-1 min-w-0 line-clamp-2 leading-snug ${isSel ? 'font-semibold' : ''} ${t.title ? (s === 'deleted' || s === 'invalid' ? '' : 'text-ink-900') : 'text-ink-500 italic'} ${s === 'deleted' ? 'line-through' : ''}">${esc(t.title || 'Untitled table')}</span>
+        ${parts.length ? `<span class="chip shrink-0 whitespace-nowrap hidden @md:inline-flex border-brand-200 text-brand-700 bg-surface" title="Joined from ${parts.length + 1} tables">${icon('rowBelow', 'size-3')}p${t.page}–${lastPage(t)}</span>` : ''}
+        ${t.edited ? `<span class="chip shrink-0 hidden @sm:inline-flex border-accent-400/60 text-accent-600 bg-orange-50">${icon('edit', 'size-3')}edited</span>` : ''}
+        ${t.origin !== 'job' ? `<span class="chip shrink-0 hidden @md:inline-flex border-ink-200 text-ink-500">${t.origin === 'region' ? 'drawn' : 'by hand'}</span>` : ''}
+        <span class="text-[11px] text-ink-500 tabular-nums w-12 text-right shrink-0 hidden @xs:inline">${t.rows.length}×${w}</span>
+      </div>`;
+      if (!parts.length || !open) return row;
+      const first = t.rows.length - parts.reduce((n, p) => n + p.rows, 0);
+      const kids = [{ page: t.page, rows: first, skipped: 0, k: 1, part: -1 },
+        ...parts.map((p, k) => ({ page: p.page, rows: p.rows, skipped: p.skipped, k: k + 2, part: k }))];
+      return row + kids.map((c, i) => `<div role="presentation" data-part="${t.id}" data-pidx="${c.part}" class="flex items-center gap-2 pl-6 pr-3 h-7 border-b border-ink-100 text-[12px] text-ink-600 hover:bg-ink-50 cursor-default select-none bg-ink-50/40">
+        <span class="text-ink-300 font-mono w-4 text-center">${i === kids.length - 1 ? '└' : '├'}</span>
+        <span class="w-14 shrink-0 text-[11px] font-semibold text-ink-500 tabular-nums">p${c.page}</span>
+        <span class="flex-1 min-w-0 truncate">${c.part < 0 ? 'First part' : `Part ${c.k}`} · ${plural(c.rows, 'row')}${c.skipped ? ` <span class="text-ink-500">(${plural(c.skipped, 'repeated header row')} dropped)</span>` : ''}</span>
+        ${c.part >= 0 ? `<button data-unjoin-part="${t.id}" data-pidx="${c.part}" class="btn-ghost btn-sm !h-6 text-ink-600" title="Separate this part (and the parts after it) again">${icon('splitCells', 'size-3')}Unjoin</button>` : ''}
+      </div>`).join('');
+    }).join('') || `<div class="px-4 py-8 text-center text-[12.5px] text-ink-600">
+        <div class="mx-auto grid place-items-center size-10 bg-ink-50 border border-ink-200 text-ink-400 mb-2">${icon('table', 'size-5')}</div>
+        ${tables.length ? `<p>No tables match the filter.</p><button data-empty="filter" class="btn-line btn-sm mt-3">Show All Tables</button>`
+          : `<p>No tables found yet.</p><button data-empty="run" class="btn-primary btn-sm mt-3">${icon('play', 'size-3.5')}Get All Tables</button>`}</div>`;
+    $('#tlist').setAttribute('aria-activedescendant', focusId && $('#tlist').querySelector(`#row-${focusId}`) ? `row-${focusId}` : '');
+  }
+
+  function clickRow(e: MouseEvent | KeyboardEvent, id: string) {
+    focusId = id;
+    const list = visible().map((t) => t.id);
+    if (e.shiftKey && anchorId && list.includes(anchorId)) {
+      const [a, b] = [list.indexOf(anchorId), list.indexOf(id)].sort((x, y) => x - y);
+      picked.clear();
+      list.slice(a!, b! + 1).forEach((x) => picked.add(x));
+      renderList();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      if (!picked.size && selected) picked.add(selected);
+      picked.has(id) ? picked.delete(id) : picked.add(id);
+      anchorId = id;
+      renderList();
+      return;
+    }
+    picked.clear();
+    picked.add(id);
+    anchorId = id;
+    select(id);
+  }
+
+  const orderedPicked = () => tables.filter((t) => picked.has(t.id)).sort((a, b) => a.page - b.page || a.idx - b.idx);
+
+  async function bulkAct(ids: string[], action: 'valid' | 'invalid' | 'none' | 'delete' | 'restore') {
+    for (const id of ids) if (pending.has(id)) await flush(id);
+    try {
+      const r = await api.bulk(ids, action);
+      await loadTables();
+      const t = tables.find((x) => x.id === selected);
+      if (t) renderBar(t);
+      // the flag change is visible in the list; only deletion needs a way back
+      if (action === 'delete') toast(`${plural(r.changed, 'table')} deleted`, 'info', { action: { label: 'Undo', run: () => bulkAct(ids, 'restore') } });
+    } catch (e: any) { toastError(e, () => bulkAct(ids, action)); }
+  }
+
+  async function joinMany(ids: string[]) {
+    for (const id of ids) if (pending.has(id)) await flush(id);
+    try {
+      const r = await api.joinMany(ids);
+      picked.clear(); picked.add(r.id);
+      expanded.add(r.id); saveExpanded();
+      await loadTables();
+      select(r.id, false);
+      toast(`Joined ${r.joined + 1} tables: ${plural(r.rows.length, 'row')} from pages ${r.pages?.[0]}–${r.pages?.at(-1)}${r.skipped ? `, ${plural(r.skipped, 'repeated header row')} dropped` : ''}`, 'ok',
+        { action: { label: 'Undo', run: () => unjoinQuiet(r.id, r.parts[0]!.table_id) } });
+    } catch (e: any) { toastError(e); }
+  }
+
+  function rowMenu(at: MouseEvent | HTMLElement, id: string) {
+    if (!picked.has(id)) { picked.clear(); picked.add(id); anchorId = id; select(id, false); }
+    else renderList();
+    const sel = orderedPicked();
+    const one = sel.length === 1 ? sel[0]! : null;
+    const ids = sel.map((t) => t.id);
+    const allDeleted = sel.every((t) => t.deleted);
+    const items: MenuItem[] = [{ heading: one ? `${label(one)} · ${one.title || 'Untitled table'}` : `${sel.length} tables selected · ${label(sel[0]!)} to ${label(sel.at(-1)!)}` }];
+    if (!one) {
+      const joinable = sel.every((t) => !t.deleted);
+      items.push({ label: `<b>Join ${sel.length} Tables</b> into ${label(sel[0]!)}`, icon: 'rowBelow', hint: `p${sel[0]!.page}–${lastPage(sel.at(-1)!)}`, disabled: !joinable, action: () => joinMany(ids) });
+    } else {
+      const cont = continuation(one);
+      const order = tables.filter((x) => !x.deleted);
+      const prev = order[order.indexOf(one) - 1];
+      if (cont) items.push({ label: `Join Next Table (${label(cont.next)})`, icon: 'rowBelow', hint: cont.why, action: () => doJoin(one.id, cont.next.id) });
+      if (prev && !one.parts?.length && !one.deleted) items.push({ label: `Append to Previous Table (${label(prev)})`, icon: 'rowAbove', action: () => doJoin(prev.id, one.id) });
+      if (one.parts?.length) items.push({ label: 'Unjoin All Parts', icon: 'splitCells', action: () => doUnjoin(one.id, one.parts[0]!.table_id) });
+    }
+    items.push('sep',
+      { label: 'Flag as Valid', icon: 'flagOk', hint: one ? 'V' : '', disabled: sel.every((t) => t.status === 'valid'), action: () => bulkAct(ids, 'valid') },
+      { label: 'Flag as Not a Table', icon: 'flagNo', hint: one ? 'X' : '', disabled: sel.every((t) => t.status === 'invalid'), action: () => bulkAct(ids, 'invalid') },
+      { label: 'Clear Flag', icon: 'dot', disabled: sel.every((t) => t.status === 'none'), action: () => bulkAct(ids, 'none') },
+      'sep');
+    if (one && !one.deleted) {
+      items.push({ label: 'Show in PDF', icon: 'target', action: () => { layout.focus('A'); viewer.scrollToTable(one); } });
+      items.push({ label: 'Open in Editor', icon: 'edit', hint: 'Enter', action: () => openInEditor() });
+      items.push({ label: 'Extract Area Again', icon: 'reset', disabled: !!one.parts?.length || !(one.bbox[2] - one.bbox[0] > 0), action: () => $('#trextract').click() });
+      items.push({ label: 'Copy for Spreadsheet', icon: 'copy', action: () => $('#tcopy').click() });
+    }
+    items.push(
+      { label: `Export ${one ? 'Table' : `${sel.length} Tables`} to Excel`, icon: 'download', action: () => (location.href = api.manyExportUrl(ids, 'xlsx', $<HTMLSelectElement>('#decimal').value, $<HTMLInputElement>('#ex-title').checked)) },
+      { label: `Export ${one ? 'Table' : `${sel.length} Tables`} to CSV`, icon: 'file', action: () => (location.href = api.manyExportUrl(ids, 'zip')) },
+      'sep',
+      allDeleted
+        ? { label: one ? 'Restore' : `Restore ${sel.length} Tables`, icon: 'restore', action: () => bulkAct(ids, 'restore') }
+        : { label: one ? 'Delete' : `Delete ${sel.length} Tables`, icon: 'trash', danger: true, hint: 'Del', action: () => bulkAct(ids, 'delete') },
+    );
+    contextMenu(at instanceof HTMLElement ? ($('#tlist').querySelector<HTMLElement>(`#row-${id}`) ?? at) : at, items);
+  }
+
+  function openInEditor() {
+    layout.focus('C');
+    requestAnimationFrame(() => editor.focusCell(0, 0));
+  }
+
+  function renderRail() {
+    const counts = new Map<number, number>();
+    tables.filter((t) => !t.deleted && t.status !== 'invalid').forEach((t) => counts.set(t.page, (counts.get(t.page) ?? 0) + 1));
+    const valid = new Set(tables.filter((t) => !t.deleted && t.status === 'valid').map((t) => t.page));
+    $('#rail').innerHTML = Array.from({ length: doc.page_count }, (_, i) => {
+      const n = i + 1, c = counts.get(n) ?? 0;
+      return `<button data-p="${n}" class="w-full h-7 flex items-center justify-between px-2 tabular-nums
+        ${c ? 'text-ink-900 font-medium' : 'text-ink-500'} hover:bg-ink-50">
+        <span>${n}</span>${c ? `<span class="min-w-4 h-4 px-1 grid place-items-center ${valid.has(n) ? 'bg-emerald-600' : 'bg-brand-600'} text-white text-[10px]">${c}</span>` : ''}</button>`;
+    }).join('');
+    markRail();
+  }
+  function markRail() {
+    const cur = viewer.current;
+    $('#rail').querySelectorAll<HTMLElement>('[data-p]').forEach((b) => {
+      const on = +b.dataset.p! === cur;
+      b.classList.toggle('bg-ink-100', on);
+      b.classList.toggle('shadow-[inset_2px_0_0_var(--color-brand-600)]', on);
+      if (on) b.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function renderBar(t: Table) {
+    document.querySelectorAll<HTMLInputElement>('input[name="flag"]').forEach((r) => { r.checked = r.value === t.status; r.disabled = t.deleted; });
+    const moved = t.original_bbox && t.bbox.some((v, i) => Math.abs(v - t.original_bbox![i]!) > 0.5);
+    $('#tbadge').innerHTML = `Page ${t.page} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ` · <span class="text-accent-600 font-medium inline-flex items-center gap-sm">${icon('edit', 'size-3')}edited</span>` : ''}${moved ? ' · area moved' : ''}`;
+    $('#tdeleted').classList.toggle('hidden', !t.deleted);
+    $('#tdel').classList.toggle('hidden', t.deleted);
+    const noArea = !(t.bbox[2] - t.bbox[0] > 0) || !!t.parts?.length;
+    $<HTMLButtonElement>('#trextract').disabled = noArea;
+    $('#trextract').title = t.parts?.length ? 'Not available for joined tables. Unjoin first.' : noArea ? 'This table has no area on the PDF' : '';
+    renderJoin(t);
+  }
+
+  let openSeq = 0;
+  async function openEditor(t: Table) {
+    const seq = ++openSeq;
+    editor.open(t, [], t.deleted);
+    try {
+      const vs = await api.versions(t.id);
+      if (seq === openSeq && selected === t.id && !pending.has(t.id)) {
+        editor.open(tables.find((x) => x.id === t.id) ?? t, vs, t.deleted);
+        if (pendingReveal?.id === t.id) editor.reveal(pendingReveal.page);
+      }
+    } catch { /* history is optional */ }
+  }
+
+  function select(tid: string | null, scroll = true) {
+    if (selected && pending.has(selected)) { saveSoon.cancel(); flush(selected); }
+    selected = tid;
+    if (pendingReveal && pendingReveal.id !== tid) pendingReveal = null;
+    queueMicrotask(() => layout.refreshTabs());
+    if (tid && !picked.has(tid)) { picked.clear(); picked.add(tid); }
+    if (tid && picked.size <= 1) anchorId = tid; // shift-click ranges start from the open table
+    const t = tables.find((x) => x.id === tid);
+    $('#tbar').classList.toggle('hidden', !t);
+    if (!t) {
+      $('#tdeleted').classList.add('hidden');
+      $('#tjoin').classList.add('hidden');
+      $('#editor').innerHTML = `<div class="h-full grid place-items-center text-center px-8">
+        <div><div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3">${icon('table', 'size-6')}</div>
+        <div class="font-medium text-ink-900 text-[14px]">No table selected</div>
+        <p class="text-[12.5px] text-ink-600 mt-1 max-w-sm">Choose a table in the list or on the PDF. Select it again on the PDF to move or resize its area.</p>
+        <div class="mt-4 flex justify-center gap-lg">
+          ${tables.length ? '' : `<button data-empty="run" class="btn-primary btn-sm">${icon('play', 'size-3.5')}Get All Tables</button>`}
+          <button data-empty="draw" class="btn-line btn-sm">${icon('crop', 'size-3.5')}Draw Table Area</button></div></div></div>`;
+    } else {
+      renderBar(t);
+      openEditor(t);
+      setSave('');
+      if (scroll) viewer.scrollToTable(t);
+    }
+    viewer.setActive(tid);
+    renderList();
+    $('#tlist').querySelector(`[data-t="${tid}"]`)?.scrollIntoView({ block: 'nearest' });
+    const u = new URL(location.href);
+    tid ? u.searchParams.set('table', tid) : u.searchParams.delete('table');
+    history.replaceState(null, '', u);
+    if (tid) focusId = tid;
+    saveDocState();
+  }
+
+  // per-document view state (HIG: remember state): last table, page, zoom
+  const stateKey = () => `tdp.doc.${id}`;
+  const saveDocState = debounce(() => {
+    if (!doc) return;
+    localStorage.setItem(stateKey(), JSON.stringify({ table: selected, page: viewer.current, zoom: viewer.fit ? null : viewer.zoom }));
+  }, 400);
+
+  // ------------------------------------------------------------ region move / resize
+  async function boxChanged(tid: string, bbox: BBox) {
+    const t = tables.find((x) => x.id === tid)!;
+    const prev = t.bbox;
+    t.bbox = bbox;
+    viewer.setTables(tables);
+    if (pending.has(tid)) await flush(tid);
+    if (t.parts?.length) { // extracting again would drop the joined parts: only move the area
+      try {
+        replaceTable(await api.patchTable(tid, { bbox }));
+        toast('Area moved. Joined tables keep their cells.', 'info', { action: { label: 'Undo', run: async () => replaceTable(await api.patchTable(tid, { bbox: prev })) } });
+      } catch (e: any) { t.bbox = prev; viewer.setTables(tables); toastError(e); }
+      return;
+    }
+    try { await reextract(t, bbox); }
+    catch (e: any) { t.bbox = prev; viewer.setTables(tables); toastError(e); }
+  }
+
+  async function reextract(t: Table, bbox: BBox | null) {
+    const done = viewer.markBusy(t.page, bbox ?? t.bbox);
+    try {
+      const n = await api.reextract(t.id, bbox, $<HTMLSelectElement>('#engine').value);
+      replaceTable(n);
+      toast(`Extracted again: ${plural(n.rows.length, 'row')} × ${plural(width(n), 'column')}`, 'ok',
+        { action: { label: 'Undo', run: async () => replaceTable(await api.restoreVersion(n.id, n.undo_version)) } });
+    } finally { done(); }
+  }
+
+  // ------------------------------------------------------------ join continuation tables
+  const normRow = (r: string[]) => r.map((c) => c.replace(/\s+/g, '').toLowerCase()).join('|').replace(/^\|+|\|+$/g, '');
+  function repeatedHeader(a: string[][], b: string[][]) {
+    let n = 0;
+    while (n < Math.min(a.length, b.length, 12) && normRow(b[n]!) && normRow(b[n]!) === normRow(a[n]!)) n++;
+    return n;
+  }
+  const width = (t: Table) => Math.max(0, ...t.rows.map((r) => r.length));
+  const label = (t: Table) => `p${t.page}·T${tables.filter((x) => x.page === t.page).indexOf(t) + 1}`;
+  const lastPage = (t: Table) => Math.max(t.page, ...(t.parts ?? []).map((p) => p.page));
+
+  /** the table right after this one (in reading order), if it looks like its continuation */
+  function continuation(t: Table): { next: Table; skip: number; why: string } | null {
+    const order = tables.filter((x) => !x.deleted);
+    const next = order[order.indexOf(t) + 1];
+    if (!next || next.page > lastPage(t) + 1) return null;
+    const skip = repeatedHeader(t.rows, next.rows);
+    const sameCols = Math.abs(width(next) - width(t)) <= 1;
+    const why = skip ? `repeats the ${skip}-row header` : /^lanjutan/i.test(next.title) ? 'titled “Lanjutan”'
+      : !next.title && sameCols ? 'untitled, same columns' : next.title && next.title === t.title ? 'same title' : '';
+    return why && (sameCols || skip) ? { next, skip, why } : null;
+  }
+
+  function renderJoin(t: Table) {
+    const box = $('#tjoin');
+    const parts = t.parts ?? [];
+    const cont = !t.deleted ? continuation(t) : null;
+    if (parts.length) {
+      box.innerHTML = `${icon('rowBelow', 'size-3.5 text-brand-600')}<b>Joined from pages ${t.page}–${lastPage(t)}</b>
+        ${parts.map((p, k) => `<span class="inline-flex items-center border border-brand-200 bg-surface h-6">
+          <button data-reveal="${k}" class="px-1.5 h-full text-[11.5px] hover:bg-brand-50" title="Show the rows from page ${p.page}">Part ${k + 2} · p${p.page} · ${plural(p.rows, 'row')}</button>
+          <button data-unjoin="${p.table_id}" class="px-1 h-full border-l border-brand-200 text-ink-600 hover:bg-brand-50" title="Unjoin part ${k + 2} (and the parts after it)">${icon('splitCells', 'size-3')}</button></span>`).join('')}
+        ${cont ? `<button data-join="${cont.next.id}" class="ml-auto btn-line btn-sm">${icon('plus', 'size-3.5')}Also Join ${label(cont.next)}</button>` : ''}`;
+    } else if (cont) {
+      box.innerHTML = `${icon('rowBelow', 'size-3.5 text-brand-600')}<span>This table seems to continue as <b>${label(cont.next)}</b> (${cont.why}).</span>
+        <button data-join="${cont.next.id}" class="ml-auto btn-primary btn-sm">Join ${label(cont.next)}</button>`;
+    }
+    box.classList.toggle('hidden', !(parts.length || cont));
+
+    // menu: any of the next few tables, or append this one to the previous table
+    const order = tables.filter((x) => !x.deleted);
+    const i = order.indexOf(t);
+    const after = order.slice(i + 1).filter((x) => x.page <= lastPage(t) + 2).slice(0, 4);
+    const prev = order[i - 1];
+    const item = (attr: string, x: Table, text: string) => `<button ${attr} class="menu-item !h-auto py-1.5 items-start">
+      <span class="w-14 shrink-0 text-[11px] font-semibold text-ink-500 pt-0.5">${label(x)}</span>
+      <span class="flex-1 min-w-0"><span class="block text-ink-800">${text}</span>
+      <span class="block text-[11px] text-ink-400 truncate">${esc(x.title || 'Untitled')} · ${x.rows.length}×${width(x)}</span></span></button>`;
+    $('#joinmenu').innerHTML = `
+      <div class="px-3 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Add below this table</div>
+      ${after.map((x) => item(`data-join="${x.id}"`, x, `Join ${label(x)}${repeatedHeader(t.rows, x.rows) ? ` <span class="text-ink-500">(drops ${plural(repeatedHeader(t.rows, x.rows), 'repeated header row')})</span>` : ''}`)).join('')
+        || '<div class="px-3 py-1.5 text-[12px] text-ink-500">No tables on the next pages.</div>'}
+      ${prev && !t.parts?.length ? `<div class="border-t border-ink-100 mt-1 pt-1 px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Or continue a previous table</div>
+        ${item(`data-joininto="${prev.id}"`, prev, `Append This Table to ${label(prev)}`)}` : ''}
+      <div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-600">Rows are added at the end. A header that repeats the first table's header is dropped. To split them again, use Unjoin.</div>`;
+  }
+
+  async function doJoin(parentId: string, childId: string) {
+    if (pending.has(parentId)) await flush(parentId);
+    if (pending.has(childId)) await flush(childId);
+    try {
+      const r = await api.join(parentId, childId);
+      expanded.add(parentId); saveExpanded();
+      await loadTables();
+      select(r.id, false);
+      toast(`Joined: ${plural(r.rows.length, 'row')} from pages ${r.pages?.join(', ')}${r.skipped ? `, ${plural(r.skipped, 'repeated header row')} dropped` : ''}`, 'ok',
+        { action: { label: 'Undo', run: () => unjoinQuiet(parentId, childId) } });
+    } catch (e: any) { toastError(e); }
+  }
+  async function unjoinQuiet(parentId: string, childId: string) {
+    pending.delete(parentId);
+    const r = await api.unjoin(parentId, childId);
+    await loadTables();
+    select(r.id, false);
+    return r;
+  }
+  async function doUnjoin(parentId: string, childId: string) {
+    const t = tables.find((x) => x.id === parentId)!;
+    const released = t.parts.slice(t.parts.findIndex((p) => p.table_id === childId)).map((p) => p.table_id);
+    try {
+      await unjoinQuiet(parentId, childId);
+      toast(`${plural(released.length, 'part')} separated again`, 'info', { action: { label: 'Undo', run: async () => { await api.joinMany([parentId, ...released]); await loadTables(); select(parentId, false); } } });
+    } catch (e: any) { toastError(e); }
+  }
+  for (const host of ['#tjoin', '#joinmenu']) {
+    $(host).addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-join],[data-joininto],[data-unjoin],[data-reveal]');
+      if (!b || !selected) return;
+      $('#joinmenu').classList.add('hidden');
+      if (b.dataset.reveal) revealPart(selected, +b.dataset.reveal);
+      else if (b.dataset.join) doJoin(selected, b.dataset.join);
+      else if (b.dataset.joininto) doJoin(b.dataset.joininto, selected);
+      else if (b.dataset.unjoin) doUnjoin(selected, b.dataset.unjoin);
+    });
+  }
+
+  // ------------------------------------------------------------ flags / delete
+  async function patchNow(t: Table, patch: TablePatch) {
+    try { replaceTable(await api.patchTable(t.id, patch), !!('deleted' in patch)); return true; }
+    catch (e: any) { toastError(e, () => patchNow(t, patch)); return false; }
+  }
+  const cur = () => tables.find((t) => t.id === selected)!;
+  const setFlag = (s: 'none' | 'valid' | 'invalid') => { const t = cur(); if (t && !t.deleted && t.status !== s) patchNow(t, { status: s }); };
+  document.querySelectorAll<HTMLInputElement>('input[name="flag"]').forEach((r) => r.addEventListener('change', () => setFlag(r.value as 'none')));
+  async function deleteTable(t: Table) {
+    if (!(await patchNow(t, { deleted: true }))) return;
+    toast(`Deleted ${t.title ? `“${t.title.slice(0, 50)}”` : 'the table'}`, 'info', { action: { label: 'Undo', run: async () => { await patchNow(t, { deleted: false }); select(t.id, false); } } });
+    if (!filt.states.includes('deleted')) {
+      const next = tables.find((x) => shown(x) && x.id !== t.id && (x.page > t.page || (x.page === t.page && x.idx > t.idx)));
+      select(next?.id ?? null, false);
+    }
+  }
+  $('#tdel').addEventListener('click', () => deleteTable(cur()));
+  $('#trestore').addEventListener('click', () => patchNow(cur(), { deleted: false }));
+  $('#tpurge').addEventListener('click', async () => {
+    const t = cur();
+    if (!(await confirmDialog('Permanently delete this table?', `“${t.title || 'Untitled table'}” (page ${t.page}) and its edit history are removed. This cannot be undone.`, 'Delete Permanently'))) return;
+    pending.delete(t.id);
+    await api.deleteTable(t.id, true);
+    tables = tables.filter((x) => x.id !== t.id);
+    select(null);
+    refresh();
+  });
+  $('#trextract').addEventListener('click', async () => {
+    const t = cur();
+    if (pending.has(t.id)) await flush(t.id);
+    reextract(t, null).catch((e) => toastError(e));
+  });
+
+  // ------------------------------------------------------------ jobs
+  // selection to restore after a re-run replaced the selected table (new id, same place)
+  let reselect: { page: number; bbox: BBox } | null = null;
+  async function runJob(pages: number[] | null) {
+    const t = tables.find((x) => x.id === selected);
+    reselect = t ? { page: t.page, bbox: t.bbox } : null;
+    try {
+      job = await api.startJob(doc.id, $<HTMLSelectElement>('#engine').value, pages);
+      pollJob();
+    } catch (e: any) { toastError(e, () => runJob(pages)); }
+  }
+
+  let lastFound = -1;
+  async function pollJob() {
+    if (!job) return;
+    try { job = await api.job(job.id); } catch { setTimeout(pollJob, 1500); return; }
+    const active = job.status === 'queued' || job.status === 'running';
+    $('#jobbar').classList.toggle('hidden', !active);
+    $<HTMLButtonElement>('#run').disabled = active;
+    if (active) {
+      const pct = job.total ? (100 * job.done) / job.total : 0;
+      $('#jobfill').style.width = `${pct}%`;
+      $('#jobtext').textContent = job.status === 'queued' ? 'Queued…'
+        : `Finding tables (${ENGINE_NAME[job.engine] ?? job.engine}): page ${job.done} of ${job.total} · ${plural(job.found, 'table')} found so far`;
+      if (job.found !== lastFound) { lastFound = job.found; await loadTables(); }
+      setTimeout(pollJob, 600);
+      return;
+    }
+    lastFound = -1;
+    await loadTables();
+    if (job.status === 'done') {
+      toast(`Found ${plural(job.found, 'table')} on ${plural(job.total, 'page')}. Flagged, edited and deleted tables were kept.`, 'ok');
+      if (job.error) toast(`Some pages could not be read: ${job.error}`, 'error', { action: { label: 'Retry', run: () => runJob(job?.pages ?? null) } });
+      if (!selected && reselect) {
+        const r = reselect;
+        const ov = (b: BBox) => Math.max(0, Math.min(b[2], r.bbox[2]) - Math.max(b[0], r.bbox[0])) * Math.max(0, Math.min(b[3], r.bbox[3]) - Math.max(b[1], r.bbox[1]));
+        const best = tables.filter((x) => x.page === r.page).sort((a, b) => ov(b.bbox) - ov(a.bbox))[0];
+        if (best && ov(best.bbox) > 0) select(best.id, false); // no scrolling: stay where the user is
+      }
+      reselect = null;
+    } else if (job.status === 'error') { const pages = job.pages; toast(`Finding tables failed: ${job.error}`, 'error', { action: { label: 'Retry', run: () => runJob(pages) } }); }
+    job = null;
+  }
+
+  async function loadTables() {
+    const fresh = await api.tables(doc.id);
+    for (const t of fresh) if (pending.has(t.id)) { const o = tables.find((x) => x.id === t.id); if (o) { t.rows = o.rows; t.merges = o.merges; } }
+    tables = fresh;
+    if (selected && !tables.some((t) => t.id === selected)) select(null);
+    refresh();
+  }
+
+  async function extractRegion(page: number, bbox: BBox) {
+    const done = viewer.markBusy(page, bbox);
+    try {
+      const r = await api.extractRegion(doc.id, page, bbox, $<HTMLSelectElement>('#engine').value);
+      if (!r.tables.length) { toast('No text in that area. Draw the rectangle around the text of the table.', 'error', { action: { label: 'Draw Again', run: () => setDraw(true) } }); return; }
+      r.tables.forEach((t) => replaceTable(t, false));
+      select(r.tables[0]!.id, false);
+    } catch (e: any) { toastError(e, () => extractRegion(page, bbox)); }
+    finally { done(); }
+  }
+
+  function setTextMode(on: boolean) {
+    viewer.setTextMode(on);
+    if (on) setDraw(false);
+    $('#seltextlabel').textContent = on ? 'Stop Selecting Text' : 'Select Text';
+    $('#seltext').classList.toggle('!bg-brand-50', on);
+    $('#seltext').classList.toggle('!text-brand-700', on);
+    $('#seltext').title = on ? 'Back to selecting table areas (T or Esc)' : 'Select and copy text, also inside table areas (T)';
+  }
+
+  function setDraw(on: boolean) {
+    if (on && viewer.textMode) setTextMode(false);
+    viewer.setDrawMode(on);
+    // HIG: no checkable buttons, the label says what happens next
+    $('#drawlabel').textContent = on ? 'Stop Drawing' : 'Draw Table Area';
+    $('#draw').title = on ? 'Stop drawing table areas (Esc)' : 'Drag a rectangle over a table to extract only that area (R)';
+    $('#drawhint').classList.toggle('hidden', !on);
+  }
+
+  // ------------------------------------------------------------ init
+  async function init() {
+    try {
+      [doc, engines] = await Promise.all([api.document(id!), api.engines()]);
+    } catch (e: any) {
+      $('#pdfhost').innerHTML = `<div class="panel p-8 text-center text-[13px] mt-10 max-w-md"><p class="text-red-700">${esc(e.message)}</p>
+        <div class="mt-4 flex justify-center gap-lg"><button class="btn-primary" onclick="location.reload()">Retry</button><a class="btn-line" href="/">Back to Library</a></div></div>`;
+      return;
+    }
+    document.title = `${doc.title} · Tabel dari PDF`;
+    $('#doc-h1').textContent = doc.title;
+    const kind = doc.source === 'bps' ? doc.meta.kind : 'upload';
+    $('#kind').textContent = KIND_LABEL[kind] ?? kind;
+    $<HTMLInputElement>('#title').value = doc.title;
+    $('#title').title = doc.title;
+    $('#meta').innerHTML = [plural(doc.page_count, 'page'), fmtBytes(doc.size), doc.meta.date ? `released ${fmtDate(doc.meta.date)}` : ''].filter(Boolean).join(' · ')
+      + (doc.meta.pdf ? ` · <a class="text-brand-600 underline" href="${esc(doc.meta.pdf)}" target="_blank" rel="noopener">Original on BPS</a>` : '');
+    $('#pgcount').textContent = `of ${doc.page_count}`;
+    $<HTMLSelectElement>('#engine').innerHTML = engines.map((e) =>
+      `<option value="${e.id}" ${e.available ? '' : 'disabled'} title="${esc(e.note || e.description)}">${esc(e.label)}${e.available ? '' : ' (not installed)'}</option>`).join('');
+
+    for (const f of ['xlsx', 'zip', 'json'] as const) {
+      $(`#ex-${f}`).addEventListener('click', () => {
+        if (!tables.length) return toast('There are no tables to export yet. Use Get All Tables first.', 'error', { action: { label: 'Get All Tables', run: () => $('#run').click() } });
+        pending.forEach((_, k) => flush(k));
+        const include = document.querySelector<HTMLInputElement>('input[name="include"]:checked')!.value;
+        location.href = api.docExportUrl(doc.id, f, include, $<HTMLSelectElement>('#decimal').value, $<HTMLInputElement>('#ex-title').checked);
+      });
+    }
+
+    tables = await api.tables(doc.id);
+    refresh();
+    await viewer.load(api.pdfUrl(doc.id), doc.pages);
+    const saved = JSON.parse(localStorage.getItem(stateKey()) ?? 'null') as { table: string | null; page: number; zoom: number | null } | null;
+    if (saved?.zoom) viewer.setZoom(saved.zoom);
+    $('#zlabel').textContent = `${Math.round(viewer.zoom * 100)}%`;
+
+    // deep link from the Tables view: ?table=ID, otherwise the last table / page of this document
+    const want = params.get('table') ?? (params.get('page') ? null : saved?.table ?? null);
+    const t = want ? tables.find((x) => x.id === want) : null;
+    if (t) {
+      if (!shown(t)) { filt.states = [...new Set([...filt.states, stateOf(t)])]; filt.page = false; refresh(); }
+      viewer.scrollToPage(t.page);
+      requestAnimationFrame(() => { select(t.id, true); });
+    } else {
+      select(null);
+      const p = +(params.get('page') ?? saved?.page ?? 0);
+      if (p) viewer.scrollToPage(p);
+    }
+
+    const last = doc.jobs?.[0];
+    if (last && (last.status === 'running' || last.status === 'queued')) { job = last; pollJob(); }
+  }
+
+  // ------------------------------------------------------------ events
+  $('#run').addEventListener('click', () => {
+    let pages: number[] | null;
+    try { pages = parsePages($<HTMLInputElement>('#pages').value, doc.page_count); }
+    catch (e: any) { $('#pages').focus(); return toast(e.message, 'error'); }
+    runJob(pages);
+  });
+  $('#pagex').addEventListener('click', () => runJob([viewer.current]));
+  $('#jobcancel').addEventListener('click', () => job && api.cancelJob(job.id));
+  $('#title').addEventListener('change', async () => {
+    const v = $<HTMLInputElement>('#title').value.trim();
+    if (!v) { $<HTMLInputElement>('#title').value = doc.title; return; }
+    try { doc = { ...doc, ...(await api.renameDocument(doc.id, v)) }; document.title = `${doc.title} · Tabel dari PDF`; }
+    catch (e: any) { toastError(e, () => $('#title').dispatchEvent(new Event('change'))); }
+  });
+  $('#title').addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') (e.target as HTMLElement).blur(); });
+
+  const zoomLabel = () => { $('#zlabel').textContent = `${Math.round(viewer.zoom * 100)}%`; saveDocState(); };
+  $('#zin').addEventListener('click', () => { viewer.setZoom(viewer.zoom * 1.2); zoomLabel(); });
+  $('#zout').addEventListener('click', () => { viewer.setZoom(viewer.zoom / 1.2); zoomLabel(); });
+  $('#zlabel').addEventListener('click', () => { viewer.fitWidth(); zoomLabel(); });
+  new ResizeObserver(zoomLabel).observe($('#scroller'));
+  $('#pgin').addEventListener('change', () => viewer.scrollToPage(Math.max(1, Math.min(doc.page_count, +$<HTMLInputElement>('#pgin').value || 1))));
+  $('#draw').addEventListener('click', () => setDraw(!viewer.drawMode));
+  $('#seltext').addEventListener('click', () => setTextMode(!viewer.textMode));
+  $('#boxes').addEventListener('change', () => { viewer.showBoxes = $<HTMLInputElement>('#boxes').checked; viewer.drawBoxes(); });
+  $('#rail').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-p]');
+    if (b) viewer.scrollToPage(+b.dataset.p!);
+  });
+  $('#tlist').addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const emptyBtn = t.closest<HTMLElement>('[data-empty]');
+    if (emptyBtn) { emptyAction(emptyBtn.dataset.empty!); return; }
+    $('#tlist').focus({ preventScroll: true });
+    const caret = t.closest<HTMLElement>('[data-caret]');
+    if (caret) { const id = caret.dataset.caret!; expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); renderList(); return; }
+    const un = t.closest<HTMLElement>('[data-unjoin-part]');
+    if (un) { const p = tables.find((x) => x.id === un.dataset.unjoinPart)!; if (selected !== p.id) select(p.id, false); doUnjoin(p.id, p.parts[+un.dataset.pidx!]!.table_id); return; }
+    const part = t.closest<HTMLElement>('[data-part]');
+    if (part) {
+      const p = tables.find((x) => x.id === part.dataset.part)!;
+      const k = +part.dataset.pidx!;
+      viewer.scrollToTable(k < 0 ? p : { ...p, page: p.parts[k]!.page, bbox: p.parts[k]!.bbox });
+      revealPart(p.id, k);
+      return;
+    }
+    const b = t.closest<HTMLElement>('[data-t]');
+    if (b) clickRow(e, b.dataset.t!);
+  });
+  $('#tlist').addEventListener('dblclick', (e) => { if ((e.target as HTMLElement).closest('[data-t]')) openInEditor(); });
+  function emptyAction(a: string) {
+    if (a === 'run') $('#run').click();
+    else if (a === 'draw') { layout.focus('A'); setDraw(true); }
+    else if (a === 'filter') { filt.states = ['none', 'valid', 'invalid', 'deleted']; filt.edited = false; filt.page = false; localStorage.setItem(FKEY, JSON.stringify(filt)); refresh(); }
+  }
+  $('#editor').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-empty]'); if (b) emptyAction(b.dataset.empty!); });
+
+  // keyboard: the list is a listbox (↑↓ Home End, Shift extends, Space toggles, Enter opens, → ← expand,
+  // Delete deletes, Menu / Shift+F10 opens the context menu, Ctrl+A selects all)
+  $('#tlist').addEventListener('keydown', (e) => {
+    const list = visible();
+    if (!list.length) return;
+    let i = list.findIndex((t) => t.id === (focusId ?? selected));
+    const cur = list[i];
+    const move = (n: number) => {
+      e.preventDefault();
+      const next = list[Math.max(0, Math.min(list.length - 1, n))]!;
+      focusId = next.id;
+      if (e.shiftKey) {
+        const ids = list.map((t) => t.id);
+        const [a, b] = [ids.indexOf(anchorId ?? next.id), ids.indexOf(next.id)].sort((x, y) => x - y);
+        picked.clear(); ids.slice(a!, b! + 1).forEach((x) => picked.add(x));
+        renderList();
+      } else if (e.ctrlKey || e.metaKey) renderList(); // move the cursor only
+      else { picked.clear(); picked.add(next.id); anchorId = next.id; select(next.id); }
+      $('#tlist').querySelector(`#row-${next.id}`)?.scrollIntoView({ block: 'nearest' });
+    };
+    if (i < 0) i = -1;
+    if (e.key === 'ArrowDown') move(i + 1);
+    else if (e.key === 'ArrowUp') move(i - 1);
+    else if (e.key === 'Home') move(0);
+    else if (e.key === 'End') move(list.length - 1);
+    else if (e.key === 'PageDown') move(i + 10);
+    else if (e.key === 'PageUp') move(i - 10);
+    else if (e.key === ' ' && cur) { e.preventDefault(); picked.has(cur.id) ? picked.delete(cur.id) : picked.add(cur.id); anchorId = cur.id; renderList(); }
+    else if (e.key === 'Enter' && cur) { e.preventDefault(); if (selected !== cur.id) select(cur.id); openInEditor(); }
+    else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && cur?.parts?.length) {
+      e.preventDefault(); e.key === 'ArrowRight' ? expanded.add(cur.id) : expanded.delete(cur.id); saveExpanded(); renderList();
+    }
+    else if ((e.key === 'Delete') && cur) { e.preventDefault(); const ids = picked.size ? [...picked] : [cur.id]; bulkAct(ids, tables.find((t) => t.id === ids[0])?.deleted ? 'restore' : 'delete'); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); list.forEach((x) => picked.add(x.id)); renderList(); }
+    else if (isMenuKey(e) && cur) { e.preventDefault(); rowMenu($('#tlist').querySelector<HTMLElement>(`#row-${cur.id}`) ?? $('#tlist'), cur.id); }
+  });
+  $('#tlist').addEventListener('mousedown', (e) => { if (e.shiftKey) e.preventDefault(); }); // no text selection on shift-click
+  $('#tlist').addEventListener('contextmenu', (e) => {
+    const t = e.target as HTMLElement;
+    const part = t.closest<HTMLElement>('[data-part]');
+    if (part) {
+      const p = tables.find((x) => x.id === part.dataset.part)!;
+      const k = +part.dataset.pidx!;
+      if (selected !== p.id) { picked.clear(); picked.add(p.id); select(p.id, false); }
+      const items: MenuItem[] = [{ heading: `${label(p)} · ${k < 0 ? 'first part' : `part ${k + 2}`} · page ${k < 0 ? p.page : p.parts[k]!.page}` },
+        { label: `Show page ${k < 0 ? p.page : p.parts[k]!.page} rows in editor`, icon: 'table', action: () => revealPart(p.id, k) },
+        { label: 'Show in PDF', icon: 'target', action: () => { layout.focus('A'); viewer.scrollToTable(k < 0 ? p : { ...p, page: p.parts[k]!.page, bbox: p.parts[k]!.bbox }); } }];
+      if (k >= 0) items.push({ label: k === p.parts.length - 1 ? 'Unjoin this part' : `Unjoin this part and ${p.parts.length - 1 - k} after it`, icon: 'splitCells', danger: true, action: () => doUnjoin(p.id, p.parts[k]!.table_id) });
+      else items.push({ label: 'Unjoin all parts', icon: 'splitCells', danger: true, action: () => doUnjoin(p.id, p.parts[0]!.table_id) });
+      contextMenu(e, items);
+      return;
+    }
+    const b = t.closest<HTMLElement>('[data-t]');
+    if (b) rowMenu(e, b.dataset.t!);
+  });
+  $('#addtable').addEventListener('click', async () => {
+    try { const t = await api.createTable(doc.id, viewer.current); replaceTable(t, false); select(t.id); }
+    catch (e: any) { toast(e.message, 'error'); }
+  });
+
+  $('#tcopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(editor.toTSV()); toast(`Copied ${plural(editor.rows.length, 'row')}. Paste them into a spreadsheet.`, 'ok'); }
+    catch { toast('The browser blocked the clipboard. Select cells and press Ctrl+C instead.', 'error'); }
+  });
+  for (const f of ['xlsx', 'csv', 'json'] as const) {
+    $(`#tx-${f}`).addEventListener('click', async () => {
+      if (pending.has(selected!)) { saveSoon.cancel(); await flush(selected!); }
+      location.href = api.tableExportUrl(selected!, f, $<HTMLSelectElement>('#decimal').value, $<HTMLInputElement>('#ex-title').checked);
+    });
+  }
+  $('#treset').addEventListener('click', async () => {
+    const t = cur();
+    pending.delete(t.id);
+    try {
+      const n = await api.resetTable(t.id);
+      replaceTable(n);
+      toast('Reset to the extracted version', 'info', { action: { label: 'Undo', run: async () => replaceTable(await api.restoreVersion(n.id, n.undo_version)) } });
+    } catch (e: any) { toastError(e); }
+  });
+
+  // pane / tab shortcuts work everywhere (HIG: standard tab-switching shortcuts)
+  addEventListener('keydown', (e) => {
+    if (e.altKey && ['1', '2', '3'].includes(e.key)) {
+      e.preventDefault();
+      const p = (['A', 'B', 'C'] as const)[+e.key - 1]!;
+      layout.focus(p);
+      ({ A: () => $('#scroller').focus(), B: () => $('#tlist').focus(), C: () => (selected ? editor.focusCell(0, 0) : $('#editor').focus()) })[p]();
+    } else if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) {
+      if (layout.cycleTab(e.key === 'PageDown' ? 1 : -1)) e.preventDefault();
+    }
+  }, true);
+  $('#scroller').tabIndex = 0;
+  $('#editor').tabIndex = -1;
+
+  addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('input,select,textarea,[contenteditable],[role=menu]')) return;
+    if (e.key === 'r' || e.key === 'R') setDraw(!viewer.drawMode);
+    else if (!e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'T')) setTextMode(!viewer.textMode);
+    else if (e.key === 'Escape') { setDraw(false); setTextMode(false); }
+    else if (e.key === '+' || e.key === '=') { viewer.setZoom(viewer.zoom * 1.2); zoomLabel(); }
+    else if (e.key === '-') { viewer.setZoom(viewer.zoom / 1.2); zoomLabel(); }
+    else if (selected && !e.ctrlKey && !e.altKey && (e.key === 'v' || e.key === 'x')) { const s = cur()?.status; const want = e.key === 'v' ? 'valid' : 'invalid'; setFlag(s === want ? 'none' : want); }
+    else if (selected && e.key === 'Delete' && !t.closest('#tlist')) { const c = cur(); if (c && !c.deleted) deleteTable(c); }
+    else if (e.key === 'j' || e.key === 'k') {
+      const list = tables.filter(shown);
+      const i = list.findIndex((x) => x.id === selected);
+      const n = list[Math.max(0, Math.min(list.length - 1, i + (e.key === 'j' ? 1 : -1)))];
+      if (n) select(n.id);
+    }
+  });
+
+  init();
+</script>

@@ -1,0 +1,242 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout title="Settings" active="settings">
+  <div class="max-w-3xl">
+    <div class="mb-5">
+      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Settings</h1>
+      <p class="text-[13px] text-ink-600 mt-0.5">The settings are saved in this browser only: they are not sent to the server, and other browsers or devices keep their own. Backup and Restore (at the bottom) is for the library on the server.</p>
+    </div>
+
+    <form id="form" class="flex flex-col gap-grid" onsubmit="return false">
+      <fieldset class="panel p-0">
+        <legend class="sr-only">Search BPS</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="search" class="size-4 text-ink-500" />Search BPS</h2>
+        <div class="px-5 pb-4 grid gap-4">
+          <div>
+            <label for="region" class="label">Default region</label>
+            <div class="flex flex-wrap items-center gap-lg">
+              <select id="region" class="field w-80 max-w-full"><option value="auto">Detect from where I am</option><option value="0000">0000 · Pusat (Indonesia)</option></select>
+              <button type="button" id="detect" class="btn-line btn-sm"><Icon name="pin" class="size-3.5" />Detect Now</button>
+            </div>
+            <p id="located" class="mt-1.5 text-[12px] text-ink-600" aria-live="polite"></p>
+          </div>
+          <label class="flex items-start gap-lg text-[13px] text-ink-800">
+            <input id="useBrowserLocation" type="checkbox" class="accent-brand-700 mt-0.5" />
+            <span>Use this browser's location to find the region
+              <span class="block text-[12px] text-ink-500">The browser asks for permission once. The coordinates are only turned into a province (OpenStreetMap) and not stored. Without it the internet address is used, which often points to Jakarta.</span></span>
+          </label>
+          <label class="flex items-start gap-lg text-[13px] text-ink-800">
+            <input id="rememberSearch" type="checkbox" class="accent-brand-700 mt-0.5" />
+            <span>Remember the last search filters
+              <span class="block text-[12px] text-ink-500">Publication or press release, region, year, month and language. The keyword is never remembered.</span></span>
+          </label>
+          <div class="flex flex-wrap items-center gap-lg">
+            <span id="lastsearch" class="text-[12px] text-ink-600"></span>
+            <button type="button" id="forget" class="btn-ghost btn-sm">Forget Last Search</button>
+          </div>
+          <div>
+            <label for="searchLang" class="label">Default language of results</label>
+            <select id="searchLang" class="field w-48"><option value="ind">Indonesian</option><option value="eng">English</option></select>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel p-0">
+        <legend class="sr-only">Library</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="library" class="size-4 text-ink-500" />Library</h2>
+        <div class="px-5 pb-4 grid gap-4">
+          <div>
+            <label for="libraryView" class="label">Show documents as</label>
+            <select id="libraryView" class="field w-48"><option value="grid">Cards</option><option value="list">List</option></select>
+          </div>
+          <label class="flex items-center gap-lg text-[13px] text-ink-800">
+            <input id="findTablesOnUpload" type="checkbox" class="accent-brand-700" />Find tables right after uploading a PDF
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel p-0">
+        <legend class="sr-only">Export</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="download" class="size-4 text-ink-500" />Export</h2>
+        <div class="px-5 pb-4 grid gap-4">
+          <div>
+            <label for="decimal" class="label">Decimal separator</label>
+            <select id="decimal" class="field w-72">
+              <option value="auto">Auto (each table's own, detected from its numbers)</option>
+              <option value=",">1.234,5 (Indonesian)</option>
+              <option value=".">1,234.5 (English)</option>
+            </select>
+          </div>
+          <label class="flex items-start gap-lg text-[13px] text-ink-800">
+            <input id="exportTitle" type="checkbox" class="accent-brand-700 mt-0.5" />
+            <span>Write the title above each table in Excel
+              <span class="block text-[12px] text-ink-500">Off: sheets s001, s002, … hold only the table, and the titles are on the Index sheet.</span></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel p-0 border-brand-200">
+        <legend class="sr-only">Backup and restore</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="layers" class="size-4 text-ink-500" />Backup and Restore
+          <span class="chip border-brand-200 bg-brand-50 text-brand-700 font-normal">library on the server</span></h2>
+        <p class="px-5 text-[12.5px] text-ink-600">Unlike the settings above, this is the library itself: every document, table, edit, flag, category and history, plus the PDFs. A backup is one .zip file you can keep or move to another computer or Docker container.</p>
+        <div class="px-5 py-4 grid gap-4">
+          <div>
+            <div class="label">Download a backup</div>
+            <p id="binfo" class="text-[12px] text-ink-600 mb-2"></p>
+            <div class="flex flex-wrap gap-lg">
+              <a id="bfull" href="/api/backup?pdfs=true" class="btn-primary" download><Icon name="download" class="size-4" />Backup with PDFs (.zip)</a>
+              <a id="bdata" href="/api/backup?pdfs=false" class="btn-line" download><Icon name="download" class="size-4" />Data Only, Without PDFs</a>
+            </div>
+          </div>
+          <div class="border-t border-ink-100 pt-4">
+            <label for="rfile" class="label">Restore from a backup</label>
+            <input id="rfile" type="file" accept=".zip,application/zip" class="block text-[13px] text-ink-700 file:btn-line file:mr-3" />
+            <div class="mt-3 flex flex-col gap-md text-[13px] text-ink-800" role="radiogroup" aria-label="How to restore">
+              <label class="flex items-start gap-lg"><input type="radio" name="rmode" value="merge" checked class="accent-brand-700 mt-0.5" />
+                <span>Add to this library <span class="block text-[12px] text-ink-500">Documents from the backup that are not here yet are added with their tables. Nothing here changes.</span></span></label>
+              <label class="flex items-start gap-lg"><input type="radio" name="rmode" value="replace" class="accent-brand-700 mt-0.5" />
+                <span>Replace this library <span class="block text-[12px] text-ink-500">The library becomes exactly the backup. The current one is kept on the server in data/backups/ first.</span></span></label>
+            </div>
+            <button type="button" id="restore" class="btn-line mt-3" disabled><Icon name="upload" class="size-4" />Restore</button>
+            <p id="rresult" class="mt-2 text-[12.5px]" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="flex items-center gap-lg">
+        <span id="saved" class="text-[12px] text-ink-500" role="status" aria-live="polite"></span>
+        <span class="flex-1"></span>
+        <button type="button" id="reset" class="btn-danger">Reset All Settings in This Browser</button>
+      </div>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  import { api, type Domain } from '../lib/api';
+  import { $, esc, ago, toast, fmtBytes, plural, confirmDialog } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { DEFAULTS, getSettings, saveSettings, resetLocal, locate, type Settings, type Located } from '../lib/settings';
+
+  let domains: Domain[] = [];
+  const keys = Object.keys(DEFAULTS) as (keyof Settings)[];
+  const el = (k: string) => document.getElementById(k) as HTMLInputElement | HTMLSelectElement | null;
+
+  function fill() {
+    const s = getSettings();
+    for (const k of keys) {
+      const e = el(k);
+      if (!e) continue;
+      if (e instanceof HTMLInputElement && e.type === 'checkbox') e.checked = s[k] as boolean;
+      else e.value = String(s[k]);
+    }
+    showLocated(JSON.parse(localStorage.getItem('tdp-located') || 'null'));
+    showLast();
+  }
+
+  const name = (id: string | null | undefined) => (id ? `${id} · ${domains.find((d) => d.id === id)?.name ?? ''}` : '');
+
+  function showLocated(l: Located | null) {
+    const p = $('#located');
+    if (getSettings().region !== 'auto') { p.textContent = 'Search BPS opens with this region (unless a last search is remembered).'; return; }
+    if (!l) { p.textContent = 'Not detected yet. It is detected the first time Search BPS opens, or press Detect Now.'; return; }
+    p.innerHTML = l.domain
+      ? `${icon('pin', 'size-3.5 inline -mt-0.5 text-brand-600')} Detected <b>${esc(name(l.domain))}</b> from ${l.source === 'location' ? 'your location' : 'your internet address'} (${esc(l.region)}), ${ago(l.at / 1000)}.`
+      : `Detected ${esc(l.region || l.country)}: outside Indonesia, so Pusat (0000) is used.`;
+  }
+
+  function showLast() {
+    let s: any = null;
+    try { s = JSON.parse(localStorage.getItem('tdp-search') || 'null'); } catch { /* ignore */ }
+    $('#lastsearch').textContent = s
+      ? `Last search: ${s.kind === 'pressrelease' ? 'press releases' : 'publications'}, ${name(s.domain) || s.domain}${s.year ? `, ${s.year}` : ''}${s.month ? `/${s.month}` : ''}, ${s.lang === 'eng' ? 'English' : 'Indonesian'}.`
+      : 'No search remembered.';
+    $('#forget').classList.toggle('hidden', !s);
+  }
+
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  $('#form').addEventListener('change', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (!keys.includes(t.id as keyof Settings)) return;
+    const v = t.type === 'checkbox' ? t.checked : t.value;
+    saveSettings({ [t.id]: v } as Partial<Settings>);
+    if (t.id === 'libraryView') localStorage.setItem('lib-view', String(v));
+    if (t.id === 'rememberSearch' && !v) localStorage.removeItem('tdp-search');
+    if (t.id === 'useBrowserLocation') localStorage.removeItem('tdp-located'); // detect again with the new source
+    showLocated(JSON.parse(localStorage.getItem('tdp-located') || 'null'));
+    showLast();
+    $('#saved').innerHTML = `${icon('check', 'size-3.5 inline text-emerald-600')} Saved in this browser`;
+    clearTimeout(savedTimer); savedTimer = setTimeout(() => ($('#saved').textContent = ''), 2500);
+  });
+
+  $('#detect').addEventListener('click', async () => {
+    const b = $<HTMLButtonElement>('#detect');
+    b.disabled = true;
+    $('#located').innerHTML = `${icon('spinner', 'size-3.5 inline')} Finding your region…`;
+    const l = await locate(true);
+    b.disabled = false;
+    if (!l) { $('#located').textContent = 'The region could not be detected (no connection to the location service).'; return; }
+    if (getSettings().region !== 'auto') $('#located').innerHTML = `Detected <b>${esc(name(l.domain) || l.region)}</b>. Choose “Detect from where I am” to use it.`;
+    else showLocated(l);
+  });
+  $('#forget').addEventListener('click', () => { localStorage.removeItem('tdp-search'); showLast(); toast('The last search is forgotten', 'ok'); });
+  $('#reset').addEventListener('click', () => {
+    const before = Object.fromEntries(Object.keys(localStorage).filter((k) => k.startsWith('tdp-') || k.startsWith('lib-')).map((k) => [k, localStorage.getItem(k)!]));
+    resetLocal();
+    fill();
+    toast('Settings reset to the defaults', 'info', { action: { label: 'Undo', run: () => { for (const [k, v] of Object.entries(before)) localStorage.setItem(k, v); fill(); } } });
+  });
+
+  // ------------------------------------------------------------ backup / restore (server data)
+  async function showInfo() {
+    try {
+      const i = await api.backupInfo();
+      $('#binfo').textContent = `${plural(i.counts.documents, 'document')}, ${plural(i.counts.tables, 'table')} (${i.counts.valid_tables} valid). `
+        + `With PDFs about ${fmtBytes(i.pdf_bytes + i.db_bytes)}, data only about ${fmtBytes(i.db_bytes)} before compression.`;
+    } catch (e: any) { $('#binfo').textContent = e.message; }
+  }
+  showInfo();
+  const rfile = $<HTMLInputElement>('#rfile');
+  rfile.addEventListener('change', () => { $<HTMLButtonElement>('#restore').disabled = !rfile.files?.length; $('#rresult').textContent = ''; });
+  $('#restore').addEventListener('click', async () => {
+    const file = rfile.files?.[0];
+    if (!file) return;
+    const mode = (document.querySelector('input[name=rmode]:checked') as HTMLInputElement).value as 'merge' | 'replace';
+    if (mode === 'replace' && !(await confirmDialog('Replace the whole library?',
+      `Everything in this library is replaced by “${file.name}”. The current library is kept on the server in data/backups/, but not shown in the app.`, 'Replace Library'))) return;
+    const b = $<HTMLButtonElement>('#restore');
+    b.disabled = true;
+    b.innerHTML = `${icon('spinner', 'size-4')}Restoring…`;
+    $('#rresult').textContent = '';
+    try {
+      const r = await api.restoreBackup(file, mode);
+      $('#rresult').innerHTML = r.mode === 'merge'
+        ? `${icon('check', 'size-3.5 inline text-emerald-600')} Added ${plural(r.added_documents ?? 0, 'document')}.`
+          + (r.skipped_existing ? ` ${plural(r.skipped_existing, 'document')} already here, skipped.` : '')
+          + (r.skipped_without_pdf ? ` ${plural(r.skipped_without_pdf, 'document')} skipped: the backup has no PDF for them.` : '')
+          + ` The library now has ${plural(r.counts.documents, 'document')} and ${plural(r.counts.tables, 'table')}. <a href="/" class="text-brand-600 hover:underline">Open Library</a>`
+        : `${icon('check', 'size-3.5 inline text-emerald-600')} Library replaced: ${plural(r.counts.documents, 'document')}, ${plural(r.counts.tables, 'table')}.`
+          + (r.missing_pdfs ? ` <span class="text-amber-700">${plural(r.missing_pdfs, 'document')} without a PDF file.</span>` : '')
+          + ` The previous library is in <code class="text-[11.5px]">${esc(r.previous ?? '')}</code>. <a href="/" class="text-brand-600 hover:underline">Open Library</a>`;
+      rfile.value = '';
+      showInfo();
+    } catch (e: any) {
+      $('#rresult').innerHTML = `<span class="text-red-700">${esc(e.message)}</span>`;
+    } finally {
+      b.innerHTML = `${icon('upload', 'size-4')}Restore`;
+      b.disabled = !rfile.files?.length;
+    }
+  });
+
+  fill();
+  api.domains().then((ds) => {
+    domains = ds;
+    const sel = $<HTMLSelectElement>('#region');
+    sel.innerHTML = '<option value="auto">Detect from where I am</option>'
+      + ds.map((d) => `<option value="${d.id}">${d.id} · ${esc(d.name)}</option>`).join('');
+    fill();
+  }).catch(() => { /* the region list needs the BPS key; "auto" and Pusat still work */ });
+</script>

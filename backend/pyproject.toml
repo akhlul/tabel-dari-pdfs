@@ -1,0 +1,14 @@
+[project]
+name = "tabel-backend"
+version = "0.1.0"
+description = "Tabel dari PDF: BPS PDF table extraction API (FastAPI + pdfspine)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
+    "pdfspine>=0.12.2",
+    "python-dotenv>=1.2.4",
+    "python-multipart>=0.0.33",
+    "uvicorn[standard]>=0.54.0",
+]
