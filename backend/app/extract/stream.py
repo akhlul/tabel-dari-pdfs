@@ -229,6 +229,7 @@ def stream_tables(words: list[Word], clip: Rect | None = None, exclude: list[Rec
             rows.append([join_words(c) for c in row])
             kinds.append(ln.numeric)
         rows = _merge_wrapped(rows, kinds)
+        rows = _fold_label_columns(rows)
         grid = clean_grid(rows)
         if not grid:
             continue
@@ -248,6 +249,34 @@ def stream_tables(words: list[Word], clip: Rect | None = None, exclude: list[Rec
                     break
         out.append(Table(rows=grid, bbox=bbox, engine="stream", title=title))
     return out
+
+
+def _fold_label_columns(rows: list[list[str]]) -> list[list[str]]:
+    """A centred / indented label ("Jumlah/Total", "Kabupaten/Kota" in the header) gets a band of its own
+    between the label column and the numbers. Move such text-only stragglers back into the label column
+    when that cell is free there."""
+    if not rows:
+        return rows
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    for j in range(1, width):
+        cells = [i for i, r in enumerate(rows) if r[j]]
+        if not cells or len(cells) > max(3, len(rows) // 4):
+            continue
+        # numbers keep their column; a "(1)" column number moves along with its label column
+        if any(is_num(rows[i][j]) and not COL_NO_RE.match(rows[i][j]) for i in cells):
+            continue
+        if any(rows[i][j - 1] for i in cells):
+            continue
+        left = [r[j - 1] for r in rows if r[j - 1]]
+        if not left or sum(1 for c in left if is_num(c)) > len(left) // 3:
+            continue  # the column on the left holds numbers: not a label column
+        for i in cells:
+            rows[i][j - 1], rows[i][j] = rows[i][j], ""
+    return rows
+
+
+COL_NO_RE = re.compile(r"^\(\d{1,2}\)$")
 
 
 def _merge_wrapped(rows: list[list[str]], numeric: list[bool]) -> list[list[str]]:

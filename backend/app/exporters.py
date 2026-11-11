@@ -16,12 +16,17 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 from .extract.quality import COL_NO
 
 ID_NUM = re.compile(r"^-?\d{1,3}(?:\.\d{3})+(?:,\d+)?$|^-?\d+(?:,\d+)?$")  # 1.234.567,89 · 12,8 · 1300
+SPACE_GROUPS = re.compile(r"^-?\s*\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?$|^-\s+\d")  # 5 474 · 30 049,5 · - 12
 EN_NUM = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$")  # 1,234,567.89 · 12.8
 
 
 def to_number(s: str, decimal: str = ","):
     """BPS number text -> float/int, or None when it is not a plain number."""
-    t = (s or "").strip().replace("\u2212", "-").replace(" ", "")
+    t = (s or "").strip().replace("\u2212", "-")
+    if re.search(r"[ \u00a0\u202f]", t):
+        if not SPACE_GROUPS.match(t):
+            return None  # "2020 2021", "12 3": two values in one cell, not one number
+        t = re.sub(r"[ \u00a0\u202f]", "", t)  # 5 474: space as thousands separator
     if not t:
         return None
     if decimal == ",":
@@ -51,7 +56,7 @@ def _vote(cell: str) -> tuple[str, bool] | None:
     strong: 10.498,2 / 1,234.5 (both present: the last one is the decimal) · 1.234.567 (repeated:
             thousands) · 25,9 / 405.5 / 0,125 / 1234.567 (one separator not followed by a 3-digit group)
     weak:   1.234 / 1,234 (one separator + exactly 3 digits: most likely a thousands separator)"""
-    t = _WRAP.sub("", (cell or "").strip().replace("\u00a0", "").replace(" ", ""))
+    t = _WRAP.sub("", (cell or "").strip().replace("\u00a0", "").replace("\u202f", "").replace(" ", ""))
     if not _TOKEN.match(t):
         return None
     seps = [ch for ch in t if ch in ".,"]

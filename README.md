@@ -114,6 +114,7 @@ The engine then appears automatically in the UI. Pre-fetching the two pinned mod
 - **Join** tables that continue across pages. When the next table repeats the header, a banner suggests the join ("Join p44·T1").
   - The **Join** menu appends any of the next tables, or appends this table to the previous one.
   - When joining, header rows that repeat the first table's header are dropped.
+  - Tables split across pages by **width** (same row labels, e.g. columns (1)–(3) on one page and (1), (4), (5) on the next) are joined **as columns**: rows are matched on the first (label) column, and the repeated label column is dropped. This is detected automatically; the Join menu also offers "Join Below" and "Join as Columns" to choose explicitly.
   - The joined table keeps a link to every page region; each continuation is drawn as a dashed "part" box.
   - **Unjoin** puts both tables back.
   - Exports label a joined table with its page range ("halaman 43–44").

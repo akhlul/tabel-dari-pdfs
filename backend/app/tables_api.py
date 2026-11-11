@@ -523,9 +523,76 @@ def repeated_header(parent_rows: list[list[str]], child_rows: list[list[str]]) -
     return n
 
 
+def _key(c: str) -> str:
+    return "".join(c.split()).lower()
+
+
+def column_continuation(parent_rows: list[list[str]], child_rows: list[list[str]]) -> bool:
+    """The continuation carries more columns for the same rows (BPS: a wide table split over two pages,
+    the label column "Kabupaten/Kota" repeated with columns (1) (4) (5) on the next page)."""
+    pk = [_key(r[0]) for r in parent_rows if r and _key(r[0])]
+    ck = [_key(r[0]) for r in child_rows if r and _key(r[0])]
+    if len(ck) < 3 or len(pk) < 3 or min(len(r) for r in child_rows) < 2:
+        return False
+    pool: dict[str, int] = {}
+    for k in pk:
+        pool[k] = pool.get(k, 0) + 1
+    common = 0
+    for k in ck:
+        if pool.get(k):
+            pool[k] -= 1
+            common += 1
+    return common >= 0.7 * max(len(pk), len(ck))
+
+
+def join_columns(t: dict, o: dict) -> tuple[list[list[str]], list[list[int]], int, int]:
+    """Place `o`'s columns to the right of `t`, matching rows on the label (first) column, whose copy in `o`
+    is dropped. Returns rows, merges, added columns, added rows (labels of `o` missing in `t`, at the end)."""
+    p, c = t["rows"], o["rows"]
+    pw = max((len(r) for r in p), default=0)
+    cw = max((len(r) for r in c), default=0)
+    add = max(cw - 1, 0)
+    out = [r + [""] * (pw - len(r) + add) for r in p]
+    where: dict[str, list[int]] = {}
+    for j, r in enumerate(p):
+        if r and _key(r[0]):
+            where.setdefault(_key(r[0]), []).append(j)
+    used: set[int] = set()
+    last, mapping, extra = -1, {}, 0
+    for i, r in enumerate(c):
+        r = r + [""] * (cw - len(r))
+        k = _key(r[0])
+        j = None
+        if k:
+            cands = [x for x in where.get(k, []) if x not in used]
+            j = next((x for x in cands if x > last), cands[0] if cands else None)
+        elif last + 1 < len(p) and last + 1 not in used and not _key(p[last + 1][0] if p[last + 1] else ""):
+            j = last + 1  # unlabeled line (e.g. 2nd header line) next to the matching unlabeled parent line
+        if j is None:
+            out.append([r[0]] + [""] * (pw - 1) + r[1:])
+            j = len(out) - 1
+            extra += 1
+        else:
+            out[j][pw:] = r[1:]
+            used.add(j)
+            last = j
+        mapping[i] = j
+    merges = [list(m) for m in t["merges"]]
+    for r0, c0, rs, cs in o["merges"]:
+        if c0 == 0:
+            continue
+        rows = [mapping.get(r0 + k) for k in range(rs)]
+        if None in rows or rows != list(range(rows[0], rows[0] + rs)):
+            continue
+        merges.append([rows[0], c0 - 1 + pw, rs, cs])
+    return out, merges, add, extra
+
+
 class Join(BaseModel):
     other: str
     skip: int | None = Field(None, ge=0, le=50)  # rows dropped from the top of `other`; None = auto (repeated header)
+    # rows = append below; columns = append to the right, rows matched on the label column; auto = guess
+    mode: Literal["auto", "rows", "columns"] = "auto"
 
 
 @router.post("/tables/{table_id}/join")
@@ -537,6 +604,14 @@ def join(table_id: str, body: Join):
         raise HTTPException(400, "Can only join two different tables of the same document")
     if t["joined_into"] or o["joined_into"]:
         raise HTTPException(400, "Table is already joined into another table")
+    mode = body.mode
+    if mode == "auto":
+        mode = "columns" if body.skip is None and column_continuation(t["rows"], o["rows"]) else "rows"
+    if mode == "columns":
+        rows, merges, cols, extra = join_columns(t, o)
+        parts = t["parts"] + [{"table_id": o["id"], "page": o["page"], "bbox": o["bbox"], "rows": 0,
+                               "skipped": 0, "mode": "columns", "cols": cols, "extra_rows": extra}] + o["parts"]
+        return _save_join(t, o, rows, merges, parts) | {"skipped": 0, "mode": "columns", "cols": cols}
     skip = repeated_header(t["rows"], o["rows"]) if body.skip is None else min(body.skip, len(o["rows"]))
     width = max(max((len(r) for r in t["rows"]), default=0), max((len(r) for r in o["rows"]), default=0))
     pad = lambda rows: [r + [""] * (width - len(r)) for r in rows]  # noqa: E731
@@ -545,7 +620,12 @@ def join(table_id: str, body: Join):
     shift = len(t["rows"]) - skip
     merges = t["merges"] + [[m[0] + shift, *m[1:]] for m in o["merges"] if m[0] >= skip]
     parts = t["parts"] + [{"table_id": o["id"], "page": o["page"], "bbox": o["bbox"], "rows": len(added),
-                           "skipped": skip}] + o["parts"]
+                           "skipped": skip, "mode": "rows"}] + o["parts"]
+    return _save_join(t, o, rows, merges, parts) | {"skipped": skip, "mode": "rows"}
+
+
+def _save_join(t: dict, o: dict, rows: list[list[str]], merges: list[list[int]], parts: list[dict]) -> dict:
+    table_id = t["id"]
     now = time.time()
     with db.db() as con:
         _snapshot(con, t, f"before join {o['id']}")
@@ -558,7 +638,7 @@ def join(table_id: str, body: Join):
         con.execute("UPDATE tables SET joined_into=?, deleted=1, deleted_at=?, updated_at=? WHERE id=?",
                     (table_id, now, now, o["id"]))
         _touch_doc(con, t["document_id"])
-    return get_one(table_id) | {"skipped": skip}
+    return get_one(table_id)
 
 
 class Unjoin(BaseModel):
@@ -578,10 +658,16 @@ def unjoin(table_id: str, body: Unjoin):
                                (table_id, f"before join {body.other}")).fetchone())
         if v:
             rows, merges, header = v["rows"], v["merges"], v["header_rows"]
-        else:  # history pruned: cut the appended rows off the end
-            n = sum(p["rows"] for p in t["parts"][idx:] if p["table_id"] in _direct(con, table_id))
+        else:  # history pruned: cut the appended rows off the end (and appended columns off the right)
+            direct = _direct(con, table_id)
+            gone = [p for p in t["parts"][idx:] if p["table_id"] in direct]
+            n = sum(p["rows"] + p.get("extra_rows", 0) for p in gone)
+            cols = sum(p.get("cols", 0) for p in gone)
             rows = t["rows"][: max(1, len(t["rows"]) - n)]
-            merges = [m for m in t["merges"] if m[0] + m[2] <= len(rows)]
+            width = max((len(r) for r in rows), default=0)
+            keep = max(1, width - cols)
+            rows = [r[:keep] for r in rows]
+            merges = [m for m in t["merges"] if m[0] + m[2] <= len(rows) and m[1] + m[3] <= keep]
             header = t["header_rows"]
         _snapshot(con, t, "before unjoin")
         released = [p["table_id"] for p in t["parts"][idx:]]

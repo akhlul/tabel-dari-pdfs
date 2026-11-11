@@ -34,6 +34,7 @@ from .config import DATA_DIR, DB_PATH, DOCS_DIR
 FORMAT = "tabel-dari-pdfs-backup"
 VERSION = 1
 BACKUPS_DIR = DATA_DIR / "backups"
+BACKUPS_DIR.mkdir(parents=True, exist_ok=True)  # also the target of `docker compose cp file.zip app:/data/backups/`
 DOC_FILES = ("source.pdf", "thumb.png")  # snap/ (rendered previews) is a cache: rebuilt on demand
 _lock = threading.Lock()
 
@@ -261,6 +262,8 @@ def _main() -> None:
     i.add_argument("--mode", choices=("merge", "replace"), default="merge")
     a = p.parse_args()
     db.init()
+    if a.cmd == "import" and not Path(a.file).is_file():
+        raise SystemExit(f"File not found: {a.file}")
     if a.cmd == "export":
         out = Path(a.out) if a.out else BACKUPS_DIR / backup_name()
         m = export_zip(out, pdfs=not a.no_pdfs)

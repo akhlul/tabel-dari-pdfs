@@ -357,3 +357,14 @@
 /* "Select Text" mode: boxes stay visible but let the pointer through to the text inside them */
 .text-mode .pv-overlay .tbox { pointer-events: none !important; background: transparent; }
 .text-mode .pv-overlay .tbox > .tag { opacity: .6; }
+
+/* desktop and tablet only: on a phone (narrow, or a short landscape touch screen) show a notice instead of the app */
+#small-screen { display: none; }
+@media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
+  #small-screen {
+    display: grid; place-items: center; position: fixed; inset: 0; z-index: 100; padding: 24px;
+    background: var(--color-surface);
+  }
+  body > :not(#small-screen) { display: none !important; }
+  body { overflow: hidden; }
+}

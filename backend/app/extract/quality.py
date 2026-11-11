@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 
 # BPS number formats: 1.298 · 12,80 · -0,32 · 1300 · 5,29% · "–"/"-"/"..." (no data)
-NUM = re.compile(r"^[(\[]?[-+−–]?\d+(?:[.,]\d+)*%?[)\]]?\*{0,3}$")
+# thousands may also be grouped by a space: 5 474 · 130 032 (older BPS publications)
+NUM = re.compile(r"^[(\[]?[-+−–]?\d+(?:[.,]\d+|[ \u00a0\u202f]\d{3}(?!\d))*%?[)\]]?\*{0,3}$")
 DASH = re.compile(r"^[-–—−]+$|^\.{2,3}$|^x$|^NA$", re.I)
 COL_NO = re.compile(r"^\(\d{1,2}\)$")  # BPS column numbering row: (1) (2) (3)
 
@@ -74,6 +75,14 @@ def numeric_rows(rows: list[list[str]]) -> int:
     return sum(1 for r in rows if sum(1 for c in r if is_num(c)) >= 1 and any(is_value(c) for c in r))
 
 
+FOOTNOTE_NO = re.compile(r"^\d{1,2}\)$")  # "1)" list / footnote markers are not values
+LEADER = re.compile(r"\.{5,}|(?:\. ){4,}\.|\u2026{2,}")  # dot leaders of a table of contents
+
+
+def has_leader(s: str) -> bool:
+    return bool(LEADER.search(s))
+
+
 def looks_like_table(rows: list[list[str]]) -> bool:
     """Reject frames around paragraphs, chart bars, single-cell boxes."""
     if len(rows) < 2:
@@ -86,9 +95,9 @@ def looks_like_table(rows: list[list[str]]) -> bool:
         return False
     if max(len(c) for c in cells) > 400:
         return False  # a cell holding a whole paragraph: page frame
-    leaders = sum(1 for r in rows if any("....." in c or "\u2026\u2026" in c for c in r))
-    if leaders >= max(2, len(rows) // 3):
-        return False  # table of contents / list of tables
+    leaders = sum(1 for r in rows if any(has_leader(c) for c in r))
+    if leaders and (leaders >= max(2, len(rows) // 3) or len(rows) <= 6):
+        return False  # table of contents / list of tables (also small fragments of one)
     fill_ratio = len(cells) / (len(rows) * ncols)
     if fill_ratio < 0.3:
         return False
@@ -96,6 +105,16 @@ def looks_like_table(rows: list[list[str]]) -> bool:
     need = max(2, int(0.6 * ncols + 0.999))
     full = sum(1 for r in rows if sum(1 for c in r if c) >= need)
     return full >= 2
+
+
+def prose_like(rows: list[list[str]]) -> bool:
+    """Borderless "table" that is really two-column prose (Indonesian | English paragraphs): no numbers,
+    cells are sentence fragments. Only meaningful without grid lines; ruled text tables are kept."""
+    cells = [c for r in rows for c in r if c]
+    if not cells:
+        return True
+    values = sum(1 for c in cells if is_value(c) and not FOOTNOTE_NO.match(c))
+    return values < 2 and sum(len(c.split()) for c in cells) / len(cells) >= 2.5
 
 
 def score(rows: list[list[str]]) -> float:

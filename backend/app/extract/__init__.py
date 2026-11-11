@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .lines import ruled_tables
-from .quality import is_value, looks_like_table
+from .quality import has_leader, is_value, looks_like_table, prose_like
 from .stream import NOTE, TITLE, _lines, stream_tables
 from .types import Rect, Table
 from .words import Word, page_words
@@ -48,7 +48,7 @@ def _run_lines(page, words, clip):
 
 
 def _run_stream(page, words, clip):
-    return [t for t in stream_tables(words, clip) if clip or looks_like_table(t.rows)]
+    return [t for t in stream_tables(words, clip) if clip or (looks_like_table(t.rows) and not prose_like(t.rows))]
 
 
 def _run_text(page, words, clip):
@@ -79,7 +79,8 @@ def _run_auto(page, words, clip):
         if ruled:
             return ruled
         return stream_tables(words, clip)
-    streams = [t for t in stream_tables(words, None, exclude=[t.bbox for t in ruled]) if looks_like_table(t.rows)]
+    streams = [t for t in stream_tables(words, None, exclude=[t.bbox for t in ruled])
+               if looks_like_table(t.rows) and not prose_like(t.rows)]
     streams = [s for s in streams if not any(_overlap(s.bbox, r.bbox) > 0.3 for r in ruled)]
     return ruled + streams
 
@@ -117,10 +118,65 @@ ENGINES: dict[str, Engine] = {
 }
 
 
+# a caption line starts with the keyword, optionally after "Lanjutan" / "Continued" (continuation pages)
+CAPTION = re.compile(r"^(?:(?:Lanjutan|LANJUTAN|Continued|CONTINUED)\b[^\d]{0,40}?)?"
+                     r"(?:Tabel|TABEL|Table|TABLE|Lampiran|LAMPIRAN|Appendix)\b")
+CAPTION_NO = re.compile(r"^(?:\d+(?:\.\d+)*\.?|[IVX]+\.?|[A-Z]\.?)$")
+
+
+def _caption_block(t: Table, words: list[Word]) -> str:
+    """Multi-line caption right above the table. Handles the BPS layout where the label sits in its own
+    column, left of the title text ("Tabel"/"Table" stacked over "1.1.1"; Indonesian + English lines):
+
+        Tabel   1.1.1   Luas Daerah ... Menurut Kabupaten/Kota
+        Table           di Provinsi Lampung, 2025
+                        Total Area ... in Lampung Province, 2025
+    """
+    x0, y0, x1, _ = t.bbox
+    near = [w for w in words if y0 - 140 <= w.cy < y0 and w.x1 > x0 - 40 and w.x0 < x1 + 40]
+    lines = _lines(near)
+    if not lines or y0 - lines[-1].y1 > 60:
+        return ""
+    # the contiguous block of lines ending at the table; its topmost caption line starts the caption
+    start = None
+    for k in range(len(lines) - 1, -1, -1):
+        ln = lines[k]
+        if k < len(lines) - 1:
+            lh = max(ln.y1 - ln.y0, 8.0)
+            if lines[k + 1].y0 - ln.y1 > 2.2 * lh:
+                break
+        if CAPTION.match(ln.text):
+            start = k
+    if start is None:
+        return ""
+    head = lines[start]
+    cap = lines[start:]
+    first = head.segs[0].text
+    if len(head.segs) >= 2 and len(first) <= 40 and not re.search(r"\d", first.split()[-1]) \
+            and head.segs[1].x0 - head.segs[0].x1 > 6:
+        # label column: everything left of the title text column
+        text_x = min((s.x0 for ln in cap for s in ln.segs if s.x0 >= head.segs[1].x0 - 3), default=head.segs[1].x0)
+        text_x = min(text_x, head.segs[1].x0)
+        label = [w for ln in cap for s in ln.segs if s.x1 < text_x - 2 for w in s.words]
+        no = next((w.text for w in sorted(label, key=lambda w: (w.cy, w.x0)) if CAPTION_NO.match(w.text)), "")
+        if not no:
+            return ""
+        body = [" ".join(s.text for s in ln.segs if s.x0 >= text_x - 3) for ln in cap]
+        return f"{first} {no} {' '.join(b for b in body if b)}".strip()[:300]
+    text = " ".join(ln.text for ln in cap)
+    # needs a number after the keyword ("Tabel 4.", "Lampiran 1.10"), not "... tabel di bawah ini:"
+    if not re.search(r"\b(?:Tabel|TABEL|Table|TABLE|Lampiran|LAMPIRAN|Appendix)\s*(?:\d|[IVX]+\b|[A-Z]\b)", text):
+        return ""
+    return text[:300]
+
+
 def _title_for(t: Table, words: list[Word]) -> str:
-    """Caption text ("Tabel 3.1 ...") in the 3 lines above the table."""
+    """Caption text ("Tabel 3.1 ...") above the table."""
     if t.title:
         return t.title
+    cap = _caption_block(t, words)
+    if cap:
+        return cap
     above = [w for w in words if t.bbox[1] - 60 <= w.cy < t.bbox[1] and w.x1 > t.bbox[0] - 20 and w.x0 < t.bbox[2] + 20]
     if not above:
         return ""
@@ -157,6 +213,24 @@ def _notes_for(t: Table, words: list[Word]) -> str:
     return "\n".join(out)[:2000]
 
 
+def _is_toc(words: list[Word]) -> bool:
+    """Table of contents / list of tables: many lines ending in dot leaders + page numbers."""
+    lines = {round(w.cy / 4) for w in words if has_leader(w.text)}
+    return len(lines) >= 4
+
+
+def _is_graphic(page) -> bool:
+    """Infographic page (chapter openers): the artwork is cut into hundreds of image tiles, and the
+    numbers printed over it line up like a borderless table. Real table pages have a handful at most."""
+    try:
+        return len(page.get_images()) >= GRAPHIC_IMAGES
+    except Exception:
+        return False
+
+
+GRAPHIC_IMAGES = 50
+
+
 def extract_page(doc, page_no: int, engine_id: str = "auto", clip: Rect | None = None) -> dict:
     """Run one engine on one page (1-based). Returns {tables, ms, error?}."""
     engine = ENGINES[engine_id]
@@ -165,6 +239,11 @@ def extract_page(doc, page_no: int, engine_id: str = "auto", clip: Rect | None =
         page = doc[page_no - 1]
         words = page_words(page)
         tables = engine.run(page, words, clip)
+        if clip is None:  # whole-page runs only: a drawn area is always extracted
+            if _is_toc(words):
+                tables = []
+            elif any(t.engine.endswith("stream") for t in tables) and _is_graphic(page):
+                tables = [t for t in tables if not t.engine.endswith("stream")]
         for t in tables:
             t.title = _title_for(t, words)
             t.notes = _notes_for(t, words)

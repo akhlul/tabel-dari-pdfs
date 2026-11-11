@@ -143,7 +143,7 @@ import Icon from '../components/Icon.astro';
 </Layout>
 
 <script>
-  import { api, ENGINE_NAME, type BBox, type Doc, type Engine, type Job, type State, type Table, type TablePatch } from '../lib/api';
+  import { api, ENGINE_NAME, type BBox, type Doc, type Engine, type Job, type State, type JoinMode, type Table, type TablePatch } from '../lib/api';
   import { PdfViewer } from '../lib/viewer';
   import { TableEditor, type EditorChange } from '../lib/editor';
   import { $, esc, toast, toastError, plural, fmtBytes, fmtDate, parsePages, debounce, confirmDialog, initMenus, KIND_LABEL, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
@@ -369,12 +369,12 @@ import Icon from '../components/Icon.astro';
       </div>`;
       if (!parts.length || !open) return row;
       const first = t.rows.length - parts.reduce((n, p) => n + p.rows, 0);
-      const kids = [{ page: t.page, rows: first, skipped: 0, k: 1, part: -1 },
-        ...parts.map((p, k) => ({ page: p.page, rows: p.rows, skipped: p.skipped, k: k + 2, part: k }))];
+      const kids = [{ page: t.page, size: plural(first, 'row'), skipped: 0, k: 1, part: -1 },
+        ...parts.map((p, k) => ({ page: p.page, size: partSize(p), skipped: p.skipped, k: k + 2, part: k }))];
       return row + kids.map((c, i) => `<div role="presentation" data-part="${t.id}" data-pidx="${c.part}" class="flex items-center gap-2 pl-6 pr-3 h-7 border-b border-ink-100 text-[12px] text-ink-600 hover:bg-ink-50 cursor-default select-none bg-ink-50/40">
         <span class="text-ink-300 font-mono w-4 text-center">${i === kids.length - 1 ? '└' : '├'}</span>
         <span class="w-14 shrink-0 text-[11px] font-semibold text-ink-500 tabular-nums">p${c.page}</span>
-        <span class="flex-1 min-w-0 truncate">${c.part < 0 ? 'First part' : `Part ${c.k}`} · ${plural(c.rows, 'row')}${c.skipped ? ` <span class="text-ink-500">(${plural(c.skipped, 'repeated header row')} dropped)</span>` : ''}</span>
+        <span class="flex-1 min-w-0 truncate">${c.part < 0 ? 'First part' : `Part ${c.k}`} · ${c.size}${c.skipped ? ` <span class="text-ink-500">(${plural(c.skipped, 'repeated header row')} dropped)</span>` : ''}</span>
         ${c.part >= 0 ? `<button data-unjoin-part="${t.id}" data-pidx="${c.part}" class="btn-ghost btn-sm !h-6 text-ink-600" title="Separate this part (and the parts after it) again">${icon('splitCells', 'size-3')}Unjoin</button>` : ''}
       </div>`).join('');
     }).join('') || `<div class="px-4 py-8 text-center text-[12.5px] text-ink-600">
@@ -542,7 +542,7 @@ import Icon from '../components/Icon.astro';
       $('#editor').innerHTML = `<div class="h-full grid place-items-center text-center px-8">
         <div><div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3">${icon('table', 'size-6')}</div>
         <div class="font-medium text-ink-900 text-[14px]">No table selected</div>
-        <p class="text-[12.5px] text-ink-600 mt-1 max-w-sm">Choose a table in the list or on the PDF. Select it again on the PDF to move or resize its area.</p>
+        <p class="text-[12.5px] text-ink-600 mt-1 max-w-[24rem] mx-auto">Choose a table in the list or on the PDF. Select it again on the PDF to move or resize its area.</p>
         <div class="mt-4 flex justify-center gap-lg">
           ${tables.length ? '' : `<button data-empty="run" class="btn-primary btn-sm">${icon('play', 'size-3.5')}Get All Tables</button>`}
           <button data-empty="draw" class="btn-line btn-sm">${icon('crop', 'size-3.5')}Draw Table Area</button></div></div></div>`;
@@ -608,17 +608,39 @@ import Icon from '../components/Icon.astro';
   const label = (t: Table) => `p${t.page}·T${tables.filter((x) => x.page === t.page).indexOf(t) + 1}`;
   const lastPage = (t: Table) => Math.max(t.page, ...(t.parts ?? []).map((p) => p.page));
 
+  /** "Tabel 1.1.1 ..." / "Lanjutan Tabel/Continued Table 1.1.1" -> "1.1.1" */
+  const tableNo = (title: string) => /\b(?:tabel|table|lampiran|appendix)\s*(\d+(?:\.\d+)*|[IVX]+\b)/i.exec(title)?.[1] ?? '';
+  const isLanjutan = (title: string) => /^(?:lanjutan|continued)\b/i.test(title);
+  const labelKey = (c: string | undefined) => (c ?? '').replace(/\s+/g, '').toLowerCase();
+  /** same row labels (first column), other columns: the table continues to the right (mirrors the backend) */
+  function sideBySide(a: Table, b: Table) {
+    const pk = a.rows.map((r) => labelKey(r[0])).filter(Boolean);
+    const ck = b.rows.map((r) => labelKey(r[0])).filter(Boolean);
+    if (ck.length < 3 || pk.length < 3 || width(b) < 2) return false;
+    const pool = new Map<string, number>();
+    pk.forEach((k) => pool.set(k, (pool.get(k) ?? 0) + 1));
+    let common = 0;
+    for (const k of ck) if (pool.get(k)) { pool.set(k, pool.get(k)! - 1); common++; }
+    return common >= 0.7 * Math.max(pk.length, ck.length);
+  }
+
   /** the table right after this one (in reading order), if it looks like its continuation */
-  function continuation(t: Table): { next: Table; skip: number; why: string } | null {
+  function continuation(t: Table): { next: Table; skip: number; why: string; cols: boolean } | null {
     const order = tables.filter((x) => !x.deleted);
     const next = order[order.indexOf(t) + 1];
     if (!next || next.page > lastPage(t) + 1) return null;
+    const no = tableNo(t.title);
+    const sameNo = !!no && no === tableNo(next.title);
+    const marked = isLanjutan(next.title) || sameNo;
+    if (sideBySide(t, next) && (marked || !next.title))
+      return { next, skip: 0, cols: true, why: `${isLanjutan(next.title) ? 'titled “Lanjutan”, ' : ''}same rows, more columns` };
     const skip = repeatedHeader(t.rows, next.rows);
     const sameCols = Math.abs(width(next) - width(t)) <= 1;
-    const why = skip ? `repeats the ${skip}-row header` : /^lanjutan/i.test(next.title) ? 'titled “Lanjutan”'
-      : !next.title && sameCols ? 'untitled, same columns' : next.title && next.title === t.title ? 'same title' : '';
-    return why && (sameCols || skip) ? { next, skip, why } : null;
+    const why = skip ? `repeats the ${skip}-row header` : isLanjutan(next.title) ? 'titled “Lanjutan”'
+      : !next.title && sameCols ? 'untitled, same columns' : sameNo || (next.title && next.title === t.title) ? 'same table number' : '';
+    return why && (sameCols || skip) ? { next, skip, why, cols: false } : null;
   }
+  const partSize = (p: Table['parts'][number]) => p.mode === 'columns' ? plural(p.cols ?? 0, 'column') : plural(p.rows, 'row');
 
   function renderJoin(t: Table) {
     const box = $('#tjoin');
@@ -627,12 +649,12 @@ import Icon from '../components/Icon.astro';
     if (parts.length) {
       box.innerHTML = `${icon('rowBelow', 'size-3.5 text-brand-600')}<b>Joined from pages ${t.page}–${lastPage(t)}</b>
         ${parts.map((p, k) => `<span class="inline-flex items-center border border-brand-200 bg-surface h-6">
-          <button data-reveal="${k}" class="px-1.5 h-full text-[11.5px] hover:bg-brand-50" title="Show the rows from page ${p.page}">Part ${k + 2} · p${p.page} · ${plural(p.rows, 'row')}</button>
+          <button data-reveal="${k}" class="px-1.5 h-full text-[11.5px] hover:bg-brand-50" title="Show the ${p.mode === 'columns' ? 'columns' : 'rows'} from page ${p.page}">Part ${k + 2} · p${p.page} · ${partSize(p)}</button>
           <button data-unjoin="${p.table_id}" class="px-1 h-full border-l border-brand-200 text-ink-600 hover:bg-brand-50" title="Unjoin part ${k + 2} (and the parts after it)">${icon('splitCells', 'size-3')}</button></span>`).join('')}
         ${cont ? `<button data-join="${cont.next.id}" class="ml-auto btn-line btn-sm">${icon('plus', 'size-3.5')}Also Join ${label(cont.next)}</button>` : ''}`;
     } else if (cont) {
       box.innerHTML = `${icon('rowBelow', 'size-3.5 text-brand-600')}<span>This table seems to continue as <b>${label(cont.next)}</b> (${cont.why}).</span>
-        <button data-join="${cont.next.id}" class="ml-auto btn-primary btn-sm">Join ${label(cont.next)}</button>`;
+        <button data-join="${cont.next.id}" class="ml-auto btn-primary btn-sm">${cont.cols ? icon('colRight', 'size-3.5') : ''}Join ${label(cont.next)}${cont.cols ? ' as Columns' : ''}</button>`;
     }
     box.classList.toggle('hidden', !(parts.length || cont));
 
@@ -646,23 +668,27 @@ import Icon from '../components/Icon.astro';
       <span class="flex-1 min-w-0"><span class="block text-ink-800">${text}</span>
       <span class="block text-[11px] text-ink-400 truncate">${esc(x.title || 'Untitled')} · ${x.rows.length}×${width(x)}</span></span></button>`;
     $('#joinmenu').innerHTML = `
-      <div class="px-3 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Add below this table</div>
-      ${after.map((x) => item(`data-join="${x.id}"`, x, `Join ${label(x)}${repeatedHeader(t.rows, x.rows) ? ` <span class="text-ink-500">(drops ${plural(repeatedHeader(t.rows, x.rows), 'repeated header row')})</span>` : ''}`)).join('')
+      <div class="px-3 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Join a continuation</div>
+      ${after.map((x) => sideBySide(t, x)
+        ? item(`data-join="${x.id}" data-mode="columns"`, x, `Join ${label(x)} as Columns <span class="text-ink-500">(same rows, adds ${plural(width(x) - 1, 'column')} on the right)</span>`)
+          + item(`data-join="${x.id}" data-mode="rows"`, x, `Join ${label(x)} Below <span class="text-ink-500">(as extra rows)</span>`)
+        : item(`data-join="${x.id}"`, x, `Join ${label(x)} Below${repeatedHeader(t.rows, x.rows) ? ` <span class="text-ink-500">(drops ${plural(repeatedHeader(t.rows, x.rows), 'repeated header row')})</span>` : ''}`)).join('')
         || '<div class="px-3 py-1.5 text-[12px] text-ink-500">No tables on the next pages.</div>'}
       ${prev && !t.parts?.length ? `<div class="border-t border-ink-100 mt-1 pt-1 px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Or continue a previous table</div>
         ${item(`data-joininto="${prev.id}"`, prev, `Append This Table to ${label(prev)}`)}` : ''}
-      <div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-600">Rows are added at the end. A header that repeats the first table's header is dropped. To split them again, use Unjoin.</div>`;
+      <div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-600">Below: rows are added at the end and a repeated header is dropped. As columns: a table split across pages by width; rows are matched on the first (label) column, which is not repeated. To split them again, use Unjoin.</div>`;
   }
 
-  async function doJoin(parentId: string, childId: string) {
+  async function doJoin(parentId: string, childId: string, mode: JoinMode = 'auto') {
     if (pending.has(parentId)) await flush(parentId);
     if (pending.has(childId)) await flush(childId);
     try {
-      const r = await api.join(parentId, childId);
+      const r = await api.join(parentId, childId, null, mode);
       expanded.add(parentId); saveExpanded();
       await loadTables();
       select(r.id, false);
-      toast(`Joined: ${plural(r.rows.length, 'row')} from pages ${r.pages?.join(', ')}${r.skipped ? `, ${plural(r.skipped, 'repeated header row')} dropped` : ''}`, 'ok',
+      const what = r.mode === 'columns' ? `${plural(r.cols ?? 0, 'column')} added on the right` : plural(r.rows.length, 'row');
+      toast(`Joined: ${what} from pages ${r.pages?.join(', ')}${r.skipped ? `, ${plural(r.skipped, 'repeated header row')} dropped` : ''}`, 'ok',
         { action: { label: 'Undo', run: () => unjoinQuiet(parentId, childId) } });
     } catch (e: any) { toastError(e); }
   }
@@ -687,7 +713,7 @@ import Icon from '../components/Icon.astro';
       if (!b || !selected) return;
       $('#joinmenu').classList.add('hidden');
       if (b.dataset.reveal) revealPart(selected, +b.dataset.reveal);
-      else if (b.dataset.join) doJoin(selected, b.dataset.join);
+      else if (b.dataset.join) doJoin(selected, b.dataset.join, (b.dataset.mode as JoinMode | undefined) ?? 'auto');
       else if (b.dataset.joininto) doJoin(b.dataset.joininto, selected);
       else if (b.dataset.unjoin) doUnjoin(selected, b.dataset.unjoin);
     });
@@ -812,7 +838,7 @@ import Icon from '../components/Icon.astro';
     try {
       [doc, engines] = await Promise.all([api.document(id!), api.engines()]);
     } catch (e: any) {
-      $('#pdfhost').innerHTML = `<div class="panel p-8 text-center text-[13px] mt-10 max-w-md"><p class="text-red-700">${esc(e.message)}</p>
+      $('#pdfhost').innerHTML = `<div class="panel p-8 text-center text-[13px] mt-10 max-w-[28rem]"><p class="text-red-700">${esc(e.message)}</p>
         <div class="mt-4 flex justify-center gap-lg"><button class="btn-primary" onclick="location.reload()">Retry</button><a class="btn-line" href="/">Back to Library</a></div></div>`;
       return;
     }

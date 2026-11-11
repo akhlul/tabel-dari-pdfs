@@ -2,7 +2,8 @@ import type { DecimalSep, Merge, Table, Version } from './api';
 import { icon } from './icons';
 import { contextMenu, esc, toast, type MenuItem } from './ui';
 
-const NUM = /^[(\[]?[-+−–]?\d+(?:[.,]\d+)*%?[)\]]?\*{0,3}$|^[-–—]$/;
+// thousands may also be grouped by a space: 5 474 · 130 032 (older BPS publications)
+const NUM = /^[(\[]?[-+−–]?\d+(?:[.,]\d+|[ \u00a0\u202f]\d{3}(?!\d))*%?[)\]]?\*{0,3}$|^[-–—]$/;
 
 // ------------------------------------------------------------------ decimal separator detection
 // (same rules as backend/app/exporters.py detect_decimal, so the UI shows what the export will use)
@@ -11,7 +12,7 @@ const WRAP = /^[(\[]?[-+−–]?|%?[)\]]?\*{0,3}$/g;
 
 /** what one cell says about the decimal separator: [sep, strong] or null */
 function vote(cell: string): [',' | '.', boolean] | null {
-  const t = (cell ?? '').trim().replace(/[\u00a0 ]/g, '').replace(WRAP, '');
+  const t = (cell ?? '').trim().replace(/[\u00a0\u202f ]/g, '').replace(WRAP, '');
   if (!TOKEN.test(t)) return null;
   const seps = [...t].filter((ch) => ch === '.' || ch === ',') as (',' | '.')[];
   const groups = t.split(/[.,]/);
@@ -81,7 +82,7 @@ export class TableEditor {
   decimalSep: DecimalSep = 'auto';
   readonly = false;
   /** joined tables: page + row count of each appended part (first part = the remaining top rows) */
-  private parts: { page: number; rows: number }[] = [];
+  private parts: { page: number; rows: number; cols: number }[] = [];
   private firstPage = 0;
   /** "show this page in the PDF" (context menu) */
   onShowPage?: (page: number) => void;
@@ -122,7 +123,9 @@ export class TableEditor {
     this.notes = t.notes ?? '';
     this.decimalSep = t.decimal_sep ?? 'auto';
     this.readonly = readonly;
-    this.parts = (t.parts ?? []).map((p) => ({ page: p.page, rows: p.rows }));
+    // column parts add columns on the right (plus, rarely, rows for labels the first part lacks)
+    this.parts = (t.parts ?? []).map((p) => (p.mode === 'columns'
+      ? { page: p.page, rows: p.extra_rows ?? 0, cols: p.cols ?? 0 } : { page: p.page, rows: p.rows, cols: 0 }));
     this.firstPage = t.page;
     // saved history becomes the undo stack, so "previous version" survives a reload
     this.undoStack = [];
@@ -216,9 +219,32 @@ export class TableEditor {
     return out.filter((x) => x.end >= x.start);
   }
   pageOfRow(r: number) { return this.segments().find((x) => r >= x.start && r <= x.end)?.page ?? this.firstPage; }
+  /** column ranges of parts joined side by side (counted from the right edge) */
+  colSegments(): { page: number; start: number; end: number }[] {
+    const cols = this.parts.filter((p) => p.cols > 0);
+    if (!cols.length) return [];
+    const w = this.width();
+    let start = Math.max(0, w - cols.reduce((n, p) => n + p.cols, 0));
+    const out: { page: number; start: number; end: number }[] = [];
+    for (const p of cols) { out.push({ page: p.page, start, end: Math.min(w, start + p.cols) - 1 }); start += p.cols; }
+    return out.filter((x) => x.end >= x.start);
+  }
+  pageOfCell(r: number, c: number) {
+    return this.colSegments().find((x) => c >= x.start && c <= x.end)?.page ?? this.pageOfRow(r);
+  }
 
-  /** select and scroll to the rows that came from `page` */
+  /** select and scroll to the rows (or columns) that came from `page` */
   reveal(page: number) {
+    const col = this.colSegments().find((x) => x.page === page);
+    if (col && this.grid) {
+      this.cur = { r: 0, c: col.start };
+      this.anchor = { ...this.cur };
+      this.range = { r0: 0, c0: col.start, r1: Math.max(0, this.rows.length - 1), c1: col.end };
+      this.paintSelection();
+      const th = this.grid.querySelector<HTMLElement>(`thead th[data-col="${col.start}"]`);
+      if (th) this.grid.scrollTo({ left: Math.max(0, th.offsetLeft - 48), behavior: 'smooth' });
+      return;
+    }
     const seg = this.segments().find((x) => x.page === page);
     if (!seg || !this.grid) return;
     this.cur = { r: seg.start, c: 0 };
@@ -639,7 +665,7 @@ export class TableEditor {
     s.innerHTML = `<span>${this.rows.length} rows × ${w} cols</span>
       ${this.merges.length ? `<span>${this.merges.length} merged</span>` : ''}
       <span class="font-medium text-ink-700">${ref}</span>
-      ${this.parts.length ? `<span class="chip border-brand-200 text-brand-700 bg-brand-50">from page ${this.pageOfRow(sel.r0)}</span>` : ''}
+      ${this.parts.length ? `<span class="chip border-brand-200 text-brand-700 bg-brand-50">from page ${this.pageOfCell(sel.r0, sel.c0)}</span>` : ''}
       <span>${this.undoStack.length ? `${this.undoStack.length} undo step${this.undoStack.length > 1 ? 's' : ''}` : ''}</span>
       <span class="ml-auto hidden 2xl:inline">Drag or Shift+click to select · right-click for more</span>`;
   }

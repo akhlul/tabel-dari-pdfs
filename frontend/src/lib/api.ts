@@ -69,7 +69,12 @@ export interface Table {
 }
 
 /** a continuation table appended to this one (see join) */
-export interface Part { table_id: string; page: number; bbox: BBox; rows: number; skipped: number }
+export interface Part {
+  table_id: string; page: number; bbox: BBox; rows: number; skipped: number;
+  /** rows = appended below; columns = appended to the right, rows matched on the label column */
+  mode?: 'rows' | 'columns'; cols?: number; extra_rows?: number;
+}
+export type JoinMode = 'auto' | 'rows' | 'columns';
 
 export interface TableRef {
   id: string; title: string; kind: string; page_count: number; page_size: [number, number];
@@ -208,8 +213,8 @@ export const api = {
     req<Table & { undo_version: number }>('POST', `/api/tables/${id}/reextract`, { bbox, engine }),
   versions: (id: string) => req<Version[]>('GET', `/api/tables/${id}/versions`),
   restoreVersion: (id: string, vid: number) => req<Table & { undo_version: number }>('POST', `/api/tables/${id}/versions/${vid}/restore`),
-  join: (id: string, other: string, skip: number | null = null) =>
-    req<Table & { skipped: number }>('POST', `/api/tables/${id}/join`, { other, skip }),
+  join: (id: string, other: string, skip: number | null = null, mode: JoinMode = 'auto') =>
+    req<Table & { skipped: number; mode: 'rows' | 'columns'; cols?: number }>('POST', `/api/tables/${id}/join`, { other, skip, mode }),
   joinMany: (ids: string[]) => req<Table & { skipped: number; joined: number }>('POST', '/api/tables/join-many', { ids }),
   unjoin: (id: string, other: string) => req<Table>('POST', `/api/tables/${id}/unjoin`, { other }),
   deleteTable: (id: string, purge = false) => req<{ ok: true }>('DELETE', `/api/tables/${id}?${q({ purge: purge || '' })}`),

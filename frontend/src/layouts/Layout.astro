@@ -19,8 +19,25 @@ const nav = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title} · Tabel dari PDF</title>
+    <!-- link previews (WhatsApp, Telegram, Slack, ...) -->
+    <meta name="description" content="Ambil tabel dari PDF publikasi dan BRS BPS, rapikan, lalu unduh ke Excel, CSV, atau JSON." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Tabel dari PDF" />
+    <meta property="og:title" content="Tabel dari PDF: tabel publikasi BPS siap Excel" />
+    <meta property="og:description" content="Cari publikasi atau BRS BPS, impor PDF-nya, tabel ditemukan otomatis, rapikan, lalu unduh ke Excel, CSV, atau JSON." />
+    <meta property="og:locale" content="id_ID" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body class={full ? 'h-dvh flex flex-col overflow-hidden' : ''}>
+    <!-- phones are not supported (needs a PDF and a grid side by side): CSS shows this instead of the app -->
+    <div id="small-screen" role="alert">
+      <div class="max-w-[22rem] text-center">
+        <span class="mx-auto mb-4 grid place-items-center size-12 bg-accent-500 text-white" aria-hidden="true"><Icon name="table" class="size-6" /></span>
+        <h1 class="text-[17px] font-semibold text-ink-900">Tabel dari PDF needs a bigger screen</h1>
+        <p class="mt-2 text-[13.5px] text-ink-600">Open it on a computer or a tablet. Checking tables needs the PDF page and the table editor side by side, which does not fit on a phone.</p>
+        <p class="mt-2 text-[13px] text-ink-500">Buka di komputer atau tablet. Layar ponsel terlalu kecil untuk aplikasi ini.</p>
+      </div>
+    </div>
     <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[80] focus:bg-surface focus:text-ink-900 focus:px-3 focus:py-2 focus:border focus:border-brand-500">Skip to Content</a>
     <header class="h-12 shrink-0 bg-header text-white flex items-center px-4 gap-6 border-b border-brand-900">
       <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
