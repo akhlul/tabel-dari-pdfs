@@ -88,7 +88,16 @@ MIGRATIONS = [
     ("documents", "deleted_at", "REAL"),                           # soft delete (undo), purged later
     ("tables", "decimal_sep", "TEXT NOT NULL DEFAULT 'auto'"),     # auto | , | .  (how numbers are read on export)
     ("documents", "category", "TEXT"),                             # json path ["Statistik Ekonomi","Transportasi"]; [] = uncategorised, NULL = not set yet
+    # audit: user ids from auth.db (NULL = before logins existed, or the server itself)
+    ("documents", "created_by", "TEXT"),
+    ("documents", "updated_by", "TEXT"),
+    ("jobs", "created_by", "TEXT"),
+    ("tables", "created_by", "TEXT"),
+    ("tables", "updated_by", "TEXT"),
+    ("table_versions", "created_by", "TEXT"),                      # who made the content stored in this version
 ]
+
+ACTIVE_JOB = "status IN ('queued','running')"
 
 JSON_COLS = {"category", "document_category", "meta", "pages", "bbox", "rows", "original_rows", "merges", "original_merges", "original_bbox", "parts", "orig"}
 
@@ -118,6 +127,13 @@ def migrate(con: sqlite3.Connection) -> None:
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
     con.executescript("CREATE INDEX IF NOT EXISTS tables_flags ON tables(status, deleted, edited);")
+    # one active extraction job per document (two jobs on one document would overwrite each other's tables)
+    seen: set[str] = set()
+    for r in con.execute(f"SELECT id, document_id FROM jobs WHERE {ACTIVE_JOB} ORDER BY created_at DESC").fetchall():
+        if r["document_id"] in seen:
+            con.execute("UPDATE jobs SET status='error', error='another job ran on this document' WHERE id=?", (r["id"],))
+        seen.add(r["document_id"])
+    con.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS jobs_one_active ON jobs(document_id) WHERE {ACTIVE_JOB}")
     _categorise_new(con)
 
 
@@ -132,6 +148,22 @@ def init() -> None:
             "WHERE status IN ('queued','running')",
             (time.time(),),
         )
+
+
+@contextmanager
+def tx(con: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """A write transaction that takes the write lock at the start (BEGIN IMMEDIATE): a second writer waits
+    (busy timeout) instead of failing with "database is locked" halfway, and what was read inside the
+    transaction cannot be changed by someone else before the commit."""
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        yield con
+    except BaseException:
+        if con.in_transaction:
+            con.execute("ROLLBACK")
+        raise
+    else:
+        con.execute("COMMIT")
 
 
 def new_id() -> str:

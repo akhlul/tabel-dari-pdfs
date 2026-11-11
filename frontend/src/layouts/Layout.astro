@@ -1,19 +1,22 @@
 ---
 import '../styles/global.css';
 import Icon from '../components/Icon.astro';
+import { EARLY } from '../lib/auth';
 
-interface Props { title: string; active?: 'library' | 'search' | 'tables' | 'doc' | 'settings'; full?: boolean; wide?: boolean }
+interface Props { title: string; active?: 'library' | 'search' | 'tables' | 'doc' | 'settings' | 'users' | 'login'; full?: boolean; wide?: boolean }
 const { title, active, full = false, wide = false } = Astro.props;
 const nav = [
   { id: 'library', href: '/', label: 'Library', icon: 'library' },
   { id: 'tables', href: '/tables', label: 'Tables', icon: 'grid' },
-  { id: 'search', href: '/search', label: 'Search BPS', icon: 'search' },
+  { id: 'search', href: '/search', label: 'Search BPS', icon: 'search', need: 'editor' },
 ];
 ---
 <!doctype html>
 <html lang="id" translate="no" class="notranslate">
   <head>
     <meta charset="utf-8" />
+    <!-- the remembered login role, before the first paint (no flash of edit buttons for visitors) -->
+    <script is:inline set:html={EARLY} />
     <!-- content is Indonesian statistics: never offer browser translation (Firefox / Chrome) -->
     <meta name="google" content="notranslate" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -46,7 +49,7 @@ const nav = [
       </a>
       <nav class="flex h-full">
         {nav.map((n) => (
-          <a href={n.href} aria-current={active === n.id ? 'page' : undefined}
+          <a href={n.href} aria-current={active === n.id ? 'page' : undefined} data-need={n.need}
              class:list={['flex items-center gap-md px-3 h-full text-[13px] border-b-2 transition-colors',
                active === n.id ? 'border-white text-white font-semibold' : 'border-transparent text-white/75 hover:text-white']}>
             <Icon name={n.icon} class="size-4" />{n.label}
@@ -60,6 +63,11 @@ const nav = [
         <a href="/settings" title="Settings (saved in this browser only)" aria-current={active === 'settings' ? 'page' : undefined}
            class:list={['flex items-center gap-md px-2 h-8 text-[13px]', active === 'settings' ? 'text-white font-semibold' : 'text-white/75 hover:text-white']}>
           <Icon name="settings" class="size-4" /><span class="hidden md:inline">Settings</span></a>
+        <a href="/login" id="login-link" data-need="public" class="flex items-center gap-md px-2 h-8 text-[13px] text-white/90 hover:text-white border border-white/30 hover:bg-white/10">
+          <Icon name="login" class="size-4" />Log In</a>
+        <button id="user-btn" type="button" class="hidden items-center gap-md px-2 h-8 text-[13px] text-white/90 hover:text-white hover:bg-white/10" aria-haspopup="menu">
+          <Icon name="user" class="size-4" /><span id="user-name" class="max-w-40 truncate"></span>
+          <span id="user-role" class="text-[10.5px] uppercase tracking-wider px-1 border border-white/40 text-white/80"></span></button>
       </div>
     </header>
     <main id="main" tabindex="-1" class={full ? 'flex-1 min-h-0 flex flex-col' : wide ? 'max-w-[2000px] mx-auto px-6 py-6' : 'max-w-[1400px] mx-auto px-6 py-6'}>
@@ -68,8 +76,30 @@ const nav = [
     <script>
       import { api } from '../lib/api';
       import { icon } from '../lib/icons';
-      import { initTooltips } from '../lib/ui';
+      import { initTooltips, contextMenu, toastError } from '../lib/ui';
+      import { me, logout, loginUrl } from '../lib/auth';
       initTooltips();
+
+      // login state in the header
+      const userBtn = document.getElementById('user-btn')!;
+      const loginLink = document.getElementById('login-link') as HTMLAnchorElement;
+      if (location.pathname !== '/login') loginLink.href = loginUrl();
+      me().then(({ user }) => {
+        if (!user) return;
+        userBtn.classList.replace('hidden', 'flex');
+        document.getElementById('user-name')!.textContent = user.name;
+        document.getElementById('user-role')!.textContent = user.role;
+        userBtn.title = `${user.username ?? user.email ?? ''} · logged in with ${user.login_method === 'google' ? 'Google' : 'a password'}`;
+        userBtn.addEventListener('click', () => contextMenu(userBtn, [
+          { heading: user.email ?? user.username ?? user.name },
+          ...(user.role === 'admin' ? [{ label: 'Users', icon: 'users', action: () => (location.href = '/users') }] : []),
+          { label: 'My Account', icon: 'lock', action: () => (location.href = '/users#me') },
+          'sep',
+          { label: 'Log Out', icon: 'logout', action: async () => {
+            try { await logout(); location.href = '/'; } catch (e) { toastError(e); }
+          } },
+        ]));
+      });
       const el = document.getElementById('health')!;
       async function check() {
         el.innerHTML = '';

@@ -122,6 +122,8 @@ def _open_backup(path: Path, tmp: Path) -> tuple[dict, Path, zipfile.ZipFile]:
         if not {"documents", "tables"} <= have:
             raise BackupError("The database in the backup has no documents / tables")
         db.migrate(con)  # an older backup gets the current columns
+        # jobs that were running when the backup was made are not running here (and would block extraction)
+        con.execute(f"UPDATE jobs SET status='error', error='interrupted (restored from a backup)' WHERE {db.ACTIVE_JOB}")
     except sqlite3.DatabaseError as e:
         raise BackupError(f"The database in the backup cannot be read ({e})") from e
     finally:

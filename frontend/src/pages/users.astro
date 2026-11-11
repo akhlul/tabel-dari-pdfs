@@ -1,0 +1,237 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout title="Users" active="users">
+  <div class="max-w-5xl flex flex-col gap-grid">
+    <section id="me" class="panel p-0" aria-labelledby="me-h">
+      <h1 id="me-h" class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="user" class="size-4 text-ink-500" />My Account</h1>
+      <p id="me-info" class="px-5 text-[13px] text-ink-600"></p>
+      <form id="pw-form" class="hidden px-5 py-4 grid gap-3 max-w-[28rem]">
+        <div id="pw-cur-row">
+          <label for="pw-cur" class="label">Current password</label>
+          <input id="pw-cur" type="password" class="field w-full" autocomplete="current-password" />
+        </div>
+        <div>
+          <label for="pw-new" class="label">New password <span class="font-normal text-ink-500">(at least 8 characters)</span></label>
+          <input id="pw-new" type="password" class="field w-full" autocomplete="new-password" minlength="8" required />
+        </div>
+        <div><button id="pw-save" class="btn-primary">Change Password</button>
+          <span id="pw-msg" class="ml-2 text-[12.5px]" role="status" aria-live="polite"></span></div>
+      </form>
+      <div class="h-3"></div>
+    </section>
+
+    <section data-need="admin" class="panel p-0" aria-labelledby="users-h">
+      <div class="px-5 pt-4 pb-2 flex items-center gap-lg">
+        <h2 id="users-h" class="font-semibold text-ink-900 flex items-center gap-lg flex-1"><Icon name="users" class="size-4 text-ink-500" />Users</h2>
+        <button id="add-btn" class="btn-primary btn-sm"><Icon name="plus" class="size-3.5" />Add User…</button>
+      </div>
+      <p class="px-5 pb-3 text-[12.5px] text-ink-600"><b>Editor</b>: import PDFs, find, fix, flag and delete tables. <b>Admin</b>: also users, backup and restore, permanent deletes.
+        Visitors who are not logged in only see tables flagged valid. A user logs in with a <b>user name and password</b>, or with <b>Google</b> using the e-mail address entered here<span id="google-off"></span>.</p>
+      <div class="overflow-x-auto border-t border-ink-100">
+        <table class="w-full text-[13px]">
+          <thead><tr class="text-[11px] uppercase tracking-wider text-ink-500 text-left">
+            <th class="px-5 py-2 font-semibold">Name</th><th class="px-2 font-semibold">Logs in with</th><th class="px-2 font-semibold">Role</th>
+            <th class="px-2 font-semibold">Status</th><th class="px-2 font-semibold">Last login</th><th><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="rows"><tr><td colspan="6" class="px-5 py-6 text-ink-500">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="dlg" aria-labelledby="dlg-h" class="panel p-0 shadow-2xl backdrop:bg-black/40 w-[480px] max-w-[92vw] m-auto border-ink-300">
+    <form id="dlg-form" class="grid">
+      <h3 id="dlg-h" class="px-5 pt-4 pb-2 font-semibold text-ink-900">Add User</h3>
+      <div class="px-5 pb-4 grid gap-3">
+        <div id="kind-row" role="radiogroup" aria-label="How the user logs in" class="flex flex-col gap-md text-[13px] text-ink-800">
+          <label class="flex items-start gap-lg"><input type="radio" name="kind" value="google" checked class="accent-brand-700 mt-0.5" />
+            <span>Google <span class="block text-[12px] text-ink-500">The user logs in with the Google account of this e-mail address.</span></span></label>
+          <label class="flex items-start gap-lg"><input type="radio" name="kind" value="password" class="accent-brand-700 mt-0.5" />
+            <span>User name and password <span class="block text-[12px] text-ink-500">No Google account needed. Tell the user the password yourself.</span></span></label>
+        </div>
+        <div><label for="f-name" class="label">Name</label><input id="f-name" class="field w-full" maxlength="100" /></div>
+        <div data-for="google"><label for="f-email" class="label">Google e-mail address</label>
+          <input id="f-email" type="email" class="field w-full" placeholder="name@gmail.com or name@bps.go.id" /></div>
+        <div data-for="password"><label for="f-user" class="label">User name <span class="font-normal text-ink-500">(3–40 letters, digits, . _ -)</span></label>
+          <input id="f-user" class="field w-full" autocomplete="off" pattern="[A-Za-z0-9._\-]{3,40}" /></div>
+        <div data-for="password"><label for="f-pw" class="label">Password <span class="font-normal text-ink-500">(at least 8 characters)</span></label>
+          <input id="f-pw" type="text" class="field w-full font-mono" autocomplete="off" minlength="8" /></div>
+        <div><label for="f-role" class="label">Role</label>
+          <select id="f-role" class="field w-48"><option value="editor">Editor</option><option value="admin">Admin</option></select></div>
+        <p id="dlg-err" role="alert" class="hidden text-[12.5px] text-red-700"></p>
+      </div>
+      <div class="flex justify-end gap-lg px-5 py-3 bg-ink-50 border-t border-ink-200">
+        <button type="button" id="dlg-cancel" class="btn-line">Cancel</button>
+        <button id="dlg-ok" class="btn-primary">Add User</button>
+      </div>
+    </form>
+  </dialog>
+</Layout>
+
+<script>
+  import { api } from '../lib/api';
+  import type { User } from '../lib/auth';
+  import { me, loginUrl, changePassword } from '../lib/auth';
+  import { $, $$, esc, ago, toast, toastError, confirmDialog, contextMenu } from '../lib/ui';
+  import { icon } from '../lib/icons';
+
+  let users: User[] = [];
+  let self: User;
+  let google = false;
+
+  // ------------------------------------------------------------ my account
+  function showMe() {
+    const ways = [self.username ? `user name <b>${esc(self.username)}</b>${self.has_password ? '' : ' (no password yet)'}` : '',
+      self.email ? `Google <b>${esc(self.email)}</b>` : ''].filter(Boolean).join(' or ');
+    $('#me-info').innerHTML = `${esc(self.name)} · <b>${self.role}</b> · logs in with ${ways}.`;
+    $('#pw-form').classList.toggle('hidden', !self.username);
+    $('#pw-cur-row').classList.toggle('hidden', !self.has_password);
+  }
+  $('#pw-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('#pw-msg');
+    try {
+      await changePassword($<HTMLInputElement>('#pw-cur').value, $<HTMLInputElement>('#pw-new').value);
+      msg.innerHTML = `<span class="text-emerald-700">${icon('check', 'size-3.5 inline')} Password changed. Other browsers are logged out.</span>`;
+      $<HTMLInputElement>('#pw-cur').value = ''; $<HTMLInputElement>('#pw-new').value = '';
+      self.has_password = true; showMe();
+    } catch (er: any) { msg.innerHTML = `<span class="text-red-700">${esc(er.message)}</span>`; }
+  });
+
+  // ------------------------------------------------------------ users (admin)
+  function row(u: User) {
+    const ways = [
+      u.username ? `<span class="flex items-center gap-sm">${icon('lock', 'size-3.5 text-ink-500')}${esc(u.username)}${u.has_password ? '' : ' <span class="text-amber-700">(no password)</span>'}</span>` : '',
+      u.email ? `<span class="flex items-center gap-sm" title="${u.google_linked ? 'Google account linked' : 'Not logged in with Google yet'}">
+        <span class="font-semibold text-[11px] ${u.google_linked ? 'text-brand-700' : 'text-ink-400'}">G</span>${esc(u.email)}</span>` : '',
+    ].join('');
+    const isMe = u.id === self.id;
+    return `<tr data-id="${u.id}" class="border-t border-ink-100 ${u.active ? '' : 'text-ink-400'}">
+      <td class="px-5 py-2"><span class="font-medium ${u.active ? 'text-ink-900' : ''}">${esc(u.name)}</span>${isMe ? ' <span class="chip border-ink-200 bg-ink-50 text-ink-600">you</span>' : ''}</td>
+      <td class="px-2 py-2 flex flex-col gap-sm">${ways}</td>
+      <td class="px-2"><select data-role aria-label="Role of ${esc(u.name)}" class="field h-8 text-[12.5px]" ${isMe ? 'disabled title="You cannot change your own role"' : ''}>
+        <option value="editor" ${u.role === 'editor' ? 'selected' : ''}>Editor</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option></select></td>
+      <td class="px-2">${u.active ? '<span class="text-emerald-700">active</span>' : '<span class="text-red-700">blocked</span>'}</td>
+      <td class="px-2 whitespace-nowrap text-ink-600">${u.last_login_at ? ago(u.last_login_at) : 'never'}</td>
+      <td class="pr-4 text-right"><button data-more class="btn-ghost btn-sm" aria-label="More actions for ${esc(u.name)}">More…</button></td></tr>`;
+  }
+
+  function render() {
+    $('#rows').innerHTML = users.map(row).join('') || '<tr><td colspan="6" class="px-5 py-6 text-ink-500">No users.</td></tr>';
+  }
+
+  async function load() {
+    try { users = await api.users(); render(); } catch (e: any) { $('#rows').innerHTML = `<tr><td colspan="6" class="px-5 py-6 text-red-700">${esc(e.message)}</td></tr>`; }
+  }
+
+  async function patch(u: User, p: Parameters<typeof api.patchUser>[1], done: string) {
+    try { await api.patchUser(u.id, p); toast(done, 'ok'); } catch (e) { toastError(e); }
+    await load();
+  }
+
+  $('#rows').addEventListener('change', (e) => {
+    const s = (e.target as HTMLElement).closest<HTMLSelectElement>('[data-role]');
+    if (!s) return;
+    const u = users.find((x) => x.id === s.closest<HTMLElement>('tr')!.dataset.id)!;
+    patch(u, { role: s.value as 'editor' | 'admin' }, `${u.name} is now ${s.value === 'admin' ? 'an admin' : 'an editor'}`);
+  });
+
+  $('#rows').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-more]');
+    if (!b) return;
+    const u = users.find((x) => x.id === b.closest<HTMLElement>('tr')!.dataset.id)!;
+    const isMe = u.id === self.id;
+    contextMenu(b, [
+      { heading: u.name },
+      { label: 'Edit Name and Login…', icon: 'edit', action: () => openDialog(u) },
+      ...(u.username ? [{ label: u.has_password ? 'Set a New Password…' : 'Set a Password…', icon: 'lock', action: () => openDialog(u, true) }] : []),
+      ...(u.google_linked ? [{ label: 'Unlink Google Account', icon: 'x', action: () => patch(u, { unlink_google: true }, 'Google account unlinked: the next Google login links it again') }] : []),
+      ...(isMe ? [] : [
+        { label: 'Log Out Everywhere', icon: 'logout', action: async () => { try { await api.logoutUser(u.id); toast(`${u.name} is logged out`, 'ok'); } catch (er) { toastError(er); } } },
+        u.active
+          ? { label: 'Block (Cannot Log In)', icon: 'flagNo', action: () => patch(u, { active: false }, `${u.name} is blocked and logged out`) }
+          : { label: 'Unblock', icon: 'flagOk', action: () => patch(u, { active: true }, `${u.name} can log in again`) },
+        'sep' as const,
+        { label: 'Delete User…', icon: 'trash', danger: true, action: async () => {
+          if (!(await confirmDialog(`Delete ${u.name}?`, 'The user is logged out and can no longer log in. Tables they edited stay as they are.', 'Delete User'))) return;
+          try { await api.deleteUser(u.id); toast(`${u.name} deleted`, 'ok'); } catch (er) { toastError(er); }
+          load();
+        } },
+      ]),
+    ]);
+  });
+
+  // ------------------------------------------------------------ add / edit dialog
+  const dlg = $<HTMLDialogElement>('#dlg');
+  let editing: User | null = null;
+  let pwOnly = false;
+  const kind = () => (document.querySelector('input[name=kind]:checked') as HTMLInputElement).value;
+  function showKind() {
+    $$<HTMLElement>('[data-for]', dlg).forEach((el) => {
+      const show = pwOnly ? el.dataset.for === 'password' && el.querySelector('#f-pw') !== null
+        : editing ? true : el.dataset.for === kind();
+      el.classList.toggle('hidden', !show);
+    });
+  }
+  $$('input[name=kind]').forEach((r) => r.addEventListener('change', showKind));
+
+  function openDialog(u: User | null = null, passwordOnly = false) {
+    editing = u; pwOnly = passwordOnly;
+    $('#dlg-h').textContent = !u ? 'Add User' : passwordOnly ? `New password for ${u.name}` : `Edit ${u.name}`;
+    $('#dlg-ok').textContent = !u ? 'Add User' : 'Save';
+    $('#kind-row').classList.toggle('hidden', !!u);
+    $('#f-role').parentElement!.classList.toggle('hidden', !!u);
+    $('#f-name').parentElement!.classList.toggle('hidden', passwordOnly);
+    $<HTMLInputElement>('#f-name').value = u?.name ?? '';
+    $<HTMLInputElement>('#f-email').value = u?.email ?? '';
+    $<HTMLInputElement>('#f-user').value = u?.username ?? '';
+    $<HTMLInputElement>('#f-pw').value = '';
+    $<HTMLInputElement>('#f-pw').placeholder = u?.has_password ? 'leave empty to keep the password' : '';
+    $<HTMLSelectElement>('#f-role').value = 'editor';
+    $('#dlg-err').classList.add('hidden');
+    showKind();
+    dlg.showModal();
+  }
+  $('#add-btn').addEventListener('click', () => openDialog());
+  $('#dlg-cancel').addEventListener('click', () => dlg.close());
+
+  $('#dlg-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = (id: string) => $<HTMLInputElement>(id).value.trim();
+    try {
+      if (!editing) {
+        const g = kind() === 'google';
+        await api.createUser({
+          name: v('#f-name'), role: $<HTMLSelectElement>('#f-role').value as 'editor' | 'admin',
+          email: g ? v('#f-email') : null, username: g ? null : v('#f-user'), password: g ? null : $<HTMLInputElement>('#f-pw').value,
+        });
+        toast(`${v('#f-name') || v('#f-email') || v('#f-user')} added`, 'ok');
+      } else if (pwOnly) {
+        await api.patchUser(editing.id, { password: $<HTMLInputElement>('#f-pw').value });
+        toast(`New password set for ${editing.name}${editing.id === self.id ? '' : '; they are logged out everywhere'}`, 'ok');
+      } else {
+        const pw = $<HTMLInputElement>('#f-pw').value;
+        await api.patchUser(editing.id, {
+          name: v('#f-name'), email: v('#f-email'), ...(v('#f-user') ? { username: v('#f-user') } : {}), ...(pw ? { password: pw } : {}),
+        });
+        toast(`${v('#f-name') || editing.name} saved`, 'ok');
+      }
+      dlg.close();
+      load();
+    } catch (er: any) {
+      $('#dlg-err').textContent = er.message;
+      $('#dlg-err').classList.remove('hidden');
+    }
+  });
+
+  // ------------------------------------------------------------ start
+  me().then((m) => {
+    if (!m.user) { location.replace(loginUrl()); return; }
+    self = m.user; google = m.google;
+    showMe();
+    if (!google) $('#google-off').innerHTML = ` <span class="text-amber-700">(Google login is not set up on this server yet: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)</span>`;
+    if (self.role === 'admin') load();
+    if (location.hash === '#me') $<HTMLElement>('#pw-new').focus();
+  });
+</script>

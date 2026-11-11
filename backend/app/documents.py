@@ -40,7 +40,7 @@ def open_pdf(path: Path):
 
 
 def store_pdf(data: bytes, *, filename: str, title: str, source: str, source_key: str | None = None,
-              meta: dict | None = None) -> dict:
+              meta: dict | None = None, by: str | None = None) -> dict:
     if not data.startswith(b"%PDF"):
         # some servers prepend whitespace/BOM; tolerate a short prefix
         i = data.find(b"%PDF", 0, 1024)
@@ -75,12 +75,22 @@ def store_pdf(data: bytes, *, filename: str, title: str, source: str, source_key
     now = time.time()
     category = categories.for_document({"source": source, "meta": meta or {}, "title": title})
     with db.db() as con:
-        con.execute(
-            "INSERT INTO documents (id,title,filename,source,source_key,meta,category,page_count,pages,size,sha256,"
-            "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (doc_id, title, filename, source, source_key, db.dumps(meta or {}), db.dumps(category), len(pages),
-             db.dumps(pages), len(data), sha, now, now),
-        )
+        with db.tx(con):
+            # the same file (or BPS item) may have been stored by another request while this one was reading it
+            dup = con.execute("SELECT id FROM documents WHERE sha256=? OR (source_key IS NOT NULL AND source_key=?)",
+                              (sha, source_key)).fetchone()
+            if dup is None:
+                con.execute(
+                    "INSERT INTO documents (id,title,filename,source,source_key,meta,category,page_count,pages,size,"
+                    "sha256,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (doc_id, title, filename, source, source_key, db.dumps(meta or {}), db.dumps(category),
+                     len(pages), db.dumps(pages), len(data), sha, now, now, by, by),
+                )
+            else:
+                con.execute("UPDATE documents SET deleted_at=NULL WHERE id=?", (dup["id"],))
+        if dup is not None:
+            shutil.rmtree(d, ignore_errors=True)  # no orphan folder
+            doc_id = dup["id"]
         return db.row(con.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone())  # type: ignore[return-value]
 
 

@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from . import backup, bps, categories, db, geo, jobs
-from .common import get_doc, get_table
+from . import api_v1, auth, backup, bps, categories, db, geo, jobs
+from .common import PUBLIC_DOC_SQL, get_doc, get_doc_for, get_table
 from .tables_api import router as tables_router
 from .config import BPS_KEY, FRONTEND_DIST, MAX_PDF_MB
 from .documents import PdfError, delete_document, open_pdf, pdf_path, store_pdf, thumb_path
@@ -21,12 +21,22 @@ from .extract import ENGINES, extract_page, list_engines
 
 app = FastAPI(title="Tabel dari PDF", version="1.1")
 db.init()
+auth.init()
+app.add_middleware(auth.AuthMiddleware)  # login, roles, CSRF, rate limits: see auth.py
+app.include_router(auth.router)
+app.include_router(auth.users_router)
+app.include_router(api_v1.router)
 app.include_router(tables_router)
 
 
 @app.exception_handler(bps.BpsError)
 async def _bps_error(_, e: bps.BpsError):
     return JSONResponse({"detail": str(e)}, status_code=502)
+
+
+@app.exception_handler(jobs.JobConflict)
+async def _job_conflict(_, e: jobs.JobConflict):
+    return JSONResponse({"detail": str(e), "job": e.job}, status_code=409)
 
 
 @app.exception_handler(PdfError)
@@ -117,7 +127,7 @@ def bps_import(body: BpsImport):
     iid = db.new_id()
     _imports[iid] = {"id": iid, "status": "starting", "done": 0, "total": None, "document": None, "job": None,
                      "error": None, "cancel": False}
-    threading.Thread(target=_run_import, args=(iid, body, key), daemon=True).start()
+    threading.Thread(target=_run_import, args=(iid, body, key, auth.current_user_id()), daemon=True).start()
     return {"import": _public(_imports[iid]), "existing": False}
 
 
@@ -125,7 +135,7 @@ def _public(st: dict) -> dict:
     return {k: v for k, v in st.items() if k != "cancel"}
 
 
-def _run_import(iid: str, body: BpsImport, key: str) -> None:
+def _run_import(iid: str, body: BpsImport, key: str, by: str | None = None) -> None:
     st = _imports[iid]
     try:
         item = bps.detail(body.kind, body.id, domain=body.domain, lang=body.lang)
@@ -135,7 +145,7 @@ def _run_import(iid: str, body: BpsImport, key: str) -> None:
         st["status"] = "processing"
         meta = item | {"domain": body.domain, "lang": body.lang}
         doc = store_pdf(data, filename=f"{body.kind}-{body.id}.pdf", title=item["title"], source="bps",
-                        source_key=key, meta=meta)
+                        source_key=key, meta=meta, by=by)
         if doc.get("source_key") != key and doc["source"] != "bps":
             # same file was uploaded before: attach the BPS metadata to it
             with db.db() as con:
@@ -144,7 +154,7 @@ def _run_import(iid: str, body: BpsImport, key: str) -> None:
                             (key, db.dumps(meta), item["title"], db.dumps(categories.for_bps(meta, item["title"])),
                              doc["id"]))
             doc = _doc(doc["id"])
-        st["job"] = jobs.create_job(doc, body.engine, None) if body.extract else None
+        st["job"] = _job_or_running(doc, body.engine, by) if body.extract else None
         st.update(status="done", document=doc)
     except bps.Cancelled:
         st.update(status="cancelled")
@@ -169,22 +179,37 @@ def import_cancel(iid: str):
     return {"ok": True}
 
 
+def _job_or_running(doc: dict, engine: str, by: str | None) -> dict | None:
+    """Start finding tables after an upload / import; when a job already runs on the document, report that one."""
+    try:
+        return jobs.create_job(doc, engine, None, by=by)
+    except jobs.JobConflict as e:
+        return e.job
+
+
 # ---------------------------------------------------------------- documents
 
 @app.get("/api/documents")
-def list_documents(q: str = ""):
+def list_documents(request: Request, q: str = ""):
     sql = """
       SELECT d.*, (SELECT COUNT(*) FROM tables t WHERE t.document_id=d.id AND t.deleted=0) AS table_count,
              (SELECT COUNT(*) FROM tables t WHERE t.document_id=d.id AND t.deleted=0 AND t.status='valid') AS valid_count,
              (SELECT status FROM jobs j WHERE j.document_id=d.id ORDER BY created_at DESC LIMIT 1) AS last_job_status
       FROM documents d {where} ORDER BY d.updated_at DESC"""
+    where = PUBLIC_DOC_SQL if auth.is_public(request) else "d.deleted_at IS NULL"
     with db.db() as con:
         if q.strip():
-            rs = con.execute(sql.format(where="WHERE d.deleted_at IS NULL AND (d.title LIKE ? OR d.filename LIKE ?)"),
+            rs = con.execute(sql.format(where=f"WHERE {where} AND (d.title LIKE ? OR d.filename LIKE ?)"),
                              (f"%{q}%", f"%{q}%"))
         else:
-            rs = con.execute(sql.format(where="WHERE d.deleted_at IS NULL"))
-        return db.rows(rs)
+            rs = con.execute(sql.format(where=f"WHERE {where}"))
+        docs = db.rows(rs)
+    if auth.is_public(request):  # visitors see only the valid tables, and not who did what
+        for d in docs:
+            d.update(table_count=d["valid_count"], last_job_status=None)
+            d.pop("created_by", None)
+            d.pop("updated_by", None)
+    return docs
 
 
 @app.post("/api/documents")
@@ -193,19 +218,25 @@ async def upload(file: UploadFile = File(...), title: str = Form(""), extract: b
     data = await file.read(MAX_PDF_MB * 1024 * 1024 + 1)
     if len(data) > MAX_PDF_MB * 1024 * 1024:
         raise HTTPException(413, f"PDF larger than {MAX_PDF_MB} MB")
+    by = auth.current_user_id()
     doc = await run_in_threadpool(store_pdf, data, filename=file.filename or "upload.pdf", title=title.strip(),
-                                  source="upload")
-    job = jobs.create_job(doc, engine, None) if extract else None
+                                  source="upload", by=by)
+    job = _job_or_running(doc, engine, by) if extract else None
     return {"document": doc, "job": job}
 
 
 @app.get("/api/documents/{doc_id}")
-def get_document(doc_id: str):
-    d = _doc(doc_id)
+def get_document(doc_id: str, request: Request):
+    d = get_doc_for(request, doc_id)
+    if auth.is_public(request):
+        return {k: v for k, v in d.items() if k not in ("created_by", "updated_by")} | {"jobs": []}
     with db.db() as con:
         d["jobs"] = db.rows(con.execute(
             "SELECT * FROM jobs WHERE document_id=? ORDER BY created_at DESC LIMIT 10", (doc_id,)))
-    return d
+    names = auth.user_names()
+    for j in d["jobs"]:
+        auth.with_names(j, names)
+    return auth.with_names(d, names)
 
 
 class DocPatch(BaseModel):
@@ -218,7 +249,8 @@ def patch_document(doc_id: str, body: DocPatch):
     _doc(doc_id)
     with db.db() as con:
         if body.title is not None:
-            con.execute("UPDATE documents SET title=?, updated_at=? WHERE id=?", (body.title.strip(), time.time(), doc_id))
+            con.execute("UPDATE documents SET title=?, updated_at=?, updated_by=? WHERE id=?",
+                        (body.title.strip(), time.time(), auth.current_user_id(), doc_id))
         if body.category is not None:  # moving does not count as an edit (keeps the "recent" order)
             con.execute("UPDATE documents SET category=? WHERE id=?", (db.dumps(categories.clean(body.category)), doc_id))
     return _doc(doc_id)
@@ -269,10 +301,11 @@ def auto_category(doc_id: str):
 
 
 @app.delete("/api/documents/{doc_id}")
-def remove_document(doc_id: str, purge: bool = False):
-    """Soft delete (restorable for an hour, see db.init); purge=true removes files immediately."""
+def remove_document(doc_id: str, request: Request, purge: bool = False):
+    """Soft delete (restorable for an hour, see db.init); purge=true (admin) removes files immediately."""
     _doc(doc_id)
     if purge:
+        auth.need(request, "admin")
         delete_document(doc_id)
     else:
         with db.db() as con:
@@ -289,14 +322,15 @@ def restore_document(doc_id: str):
 
 
 @app.get("/api/documents/{doc_id}/pdf")
-def get_pdf(doc_id: str):
-    d = _doc(doc_id)
+def get_pdf(doc_id: str, request: Request):
+    d = get_doc_for(request, doc_id)
     return FileResponse(pdf_path(doc_id), media_type="application/pdf", filename=d["filename"],
                         content_disposition_type="inline")
 
 
 @app.get("/api/documents/{doc_id}/thumb")
-def get_thumb(doc_id: str):
+def get_thumb(doc_id: str, request: Request):
+    get_doc_for(request, doc_id)
     p = thumb_path(doc_id)
     if not p.exists():
         raise HTTPException(404, "No thumbnail")
@@ -315,7 +349,7 @@ class JobCreate(BaseModel):
 def start_job(doc_id: str, body: JobCreate):
     d = _doc(doc_id)
     try:
-        return jobs.create_job(d, body.engine, body.pages, body.replace)
+        return jobs.create_job(d, body.engine, body.pages, body.replace, by=auth.current_user_id())
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -326,7 +360,7 @@ def get_job(job_id: str):
         j = db.row(con.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
     if not j:
         raise HTTPException(404, "Job not found")
-    return j
+    return auth.with_names(j)
 
 
 @app.post("/api/jobs/{job_id}/cancel")
@@ -350,6 +384,7 @@ async def extract_region(doc_id: str, body: RegionExtract):
         raise HTTPException(400, "Page out of range")
     if body.engine not in ENGINES or not ENGINES[body.engine].available:
         raise HTTPException(400, f"Engine not available: {body.engine}")
+    by = auth.current_user_id()
     clip = None
     if body.bbox:
         x0, y0, x1, y1 = body.bbox
@@ -365,12 +400,13 @@ async def extract_region(doc_id: str, body: RegionExtract):
                 t.bbox = clip if len(res["tables"]) == 1 else t.bbox
         if not body.save:
             return {"tables": [t.to_dict() | {"page": body.page} for t in res["tables"]], "ms": res["ms"]}
-        with db.db() as con:
-            con.execute("BEGIN")
+        with db.db() as con, db.tx(con):
+            if not clip and (running := jobs.active_job(con, doc_id)):  # a whole page is replaced
+                raise jobs.JobConflict("Tables are being found in this document right now. Wait until that "
+                                       "finishes, then extract this page again.", running)
             ids = jobs.save_tables(con, doc_id, body.page, res["tables"], job_id=None,
-                                   origin="region" if clip else "job", replace=not clip)
+                                   origin="region" if clip else "job", replace=not clip, by=by)
             con.execute("UPDATE documents SET updated_at=? WHERE id=?", (time.time(), doc_id))
-            con.execute("COMMIT")
         return {"tables": [_table(i) for i in ids], "ms": res["ms"]}
 
     return await run_in_threadpool(run)

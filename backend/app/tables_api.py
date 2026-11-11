@@ -9,13 +9,14 @@ import time
 from typing import Literal
 
 import pdfspine
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import db, exporters, jobs
-from .common import MEDIA, doc_kind, download, get_doc, get_table
+from . import auth, db, exporters, jobs
+from .common import (MEDIA, PUBLIC_DOC_SQL, PUBLIC_TABLE_SQL, doc_kind, download, get_doc, get_doc_for,
+                     get_table, get_table_for, table_is_public)
 from .documents import doc_dir, open_pdf, pdf_path
 from .extract import ENGINES, Table, extract_page
 from .extract.quality import remap_merges
@@ -40,13 +41,14 @@ def _norm_merges(ms) -> list:
 
 
 def _snapshot(con, t: dict, reason: str) -> int:
-    """Store the current content (and area) of a table; returns the version id (used for Undo)."""
+    """Store the current content (and area) of a table; returns the version id (used for Undo).
+    created_by = who made that content (the last editor of the table)."""
     vid = con.execute(
-        "INSERT INTO table_versions (table_id, rows, merges, header_rows, bbox, orig, reason, created_at) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO table_versions (table_id, rows, merges, header_rows, bbox, orig, reason, created_at, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (t["id"], db.dumps(t["rows"]), db.dumps(t["merges"]), t["header_rows"], db.dumps(t["bbox"]),
          db.dumps({"original_rows": t["original_rows"], "original_merges": t["original_merges"], "engine": t["engine"]}),
-         reason, time.time()),
+         reason, time.time(), t.get("updated_by")),
     ).lastrowid
     con.execute(
         "DELETE FROM table_versions WHERE table_id=? AND id NOT IN "
@@ -58,6 +60,34 @@ def _snapshot(con, t: dict, reason: str) -> int:
 
 def _touch_doc(con, doc_id: str) -> None:
     con.execute("UPDATE documents SET updated_at=? WHERE id=?", (time.time(), doc_id))
+
+
+def _me() -> str | None:
+    return auth.current_user_id()
+
+
+def _fresh(con, table_id: str) -> dict:
+    """The table as it is now, read inside a write transaction (db.tx)."""
+    t = db.row(con.execute("SELECT * FROM tables WHERE id=?", (table_id,)).fetchone())
+    if not t:
+        raise HTTPException(404, "Table not found")
+    return t
+
+
+AUDIT = ("created_by", "updated_by")
+
+
+def _audit(items: list[dict], request: Request) -> list[dict]:
+    """Staff see who created / changed a table; visitors do not see user ids or names."""
+    if auth.is_public(request):
+        for it in items:
+            for k in AUDIT:
+                it.pop(k, None)
+        return items
+    names = auth.user_names()
+    for it in items:
+        auth.with_names(it, names)
+    return items
 
 
 def _clean_merges(merges: list[list[int]], nrows: int, ncols: int) -> list[list[int]]:
@@ -81,12 +111,13 @@ def _clean_merges(merges: list[list[int]], nrows: int, ncols: int) -> list[list[
 # ---------------------------------------------------------------- per document
 
 @router.get("/documents/{doc_id}/tables")
-def list_doc_tables(doc_id: str):
-    get_doc(doc_id)
+def list_doc_tables(doc_id: str, request: Request):
+    get_doc_for(request, doc_id)
+    only = f" AND {PUBLIC_TABLE_SQL}" if auth.is_public(request) else ""
     with db.db() as con:
-        return db.rows(con.execute(
-            "SELECT * FROM tables WHERE document_id=? AND joined_into IS NULL ORDER BY page, idx, created_at",
-            (doc_id,)))
+        return _audit(db.rows(con.execute(
+            f"SELECT * FROM tables t WHERE document_id=? AND joined_into IS NULL{only} ORDER BY page, idx, created_at",
+            (doc_id,))), request)
 
 
 class TableCreate(BaseModel):
@@ -101,19 +132,20 @@ def create_table(doc_id: str, body: TableCreate):
     get_doc(doc_id)
     t = Table(rows=body.rows, bbox=tuple(body.bbox), engine="manual", title=body.title)
     with db.db() as con:
-        ids = jobs.save_tables(con, doc_id, body.page, [t], job_id=None, origin="manual", replace=False)
+        ids = jobs.save_tables(con, doc_id, body.page, [t], job_id=None, origin="manual", replace=False, by=_me())
     return get_table(ids[0])
 
 
 # ---------------------------------------------------------------- cross-document search
 
-def _all_light(con) -> list[dict]:
+def _all_light(con, public: bool = False) -> list[dict]:
     rs = con.execute(
         """SELECT t.id, t.document_id, t.page, t.idx, t.title, t.notes, t.status, t.deleted, t.edited,
                   t.updated_at, d.title AS doc_title, d.source AS doc_source, d.meta AS doc_meta,
                   d.category AS doc_category
            FROM tables t JOIN documents d ON d.id = t.document_id
-           WHERE t.joined_into IS NULL AND d.deleted_at IS NULL""").fetchall()
+           WHERE t.joined_into IS NULL AND d.deleted_at IS NULL""" + (f" AND {PUBLIC_TABLE_SQL}" if public else "")
+    ).fetchall()
     out = []
     for r in rs:
         d = dict(r)
@@ -132,6 +164,7 @@ def _csv(s: str | None) -> list[str]:
 
 @router.get("/tables")
 def search_tables(
+    request: Request,
     state: str = Query("valid", description="csv of none,valid,invalid,deleted; empty = all states"),
     edited: bool | None = None,
     docs: str = "",
@@ -141,10 +174,13 @@ def search_tables(
     offset: int = Query(0, ge=0),
     limit: int = Query(30, ge=1, le=200),
 ):
+    public = auth.is_public(request)
+    if public:  # visitors who are not logged in: only tables flagged valid
+        state = "valid"
     want_state, want_docs, want_kinds = set(_csv(state)), set(_csv(docs)), set(_csv(kinds))
     ql = q.strip().lower()
     with db.db() as con:
-        light = _all_light(con)
+        light = _all_light(con, public)
 
     def ok(t: dict, skip: str = "") -> bool:
         if skip != "state" and want_state and state_of(t) not in want_state:
@@ -175,7 +211,8 @@ def search_tables(
                                                              "count": 0})
             f["count"] += 1
     with db.db() as con:  # documents with no matching table still appear in the source list
-        for d in db.rows(con.execute("SELECT id, title, source, meta, category FROM documents WHERE deleted_at IS NULL")):
+        for d in db.rows(con.execute("SELECT id, title, source, meta, category FROM documents d WHERE "
+                                     + (PUBLIC_DOC_SQL if public else "deleted_at IS NULL"))):
             facets["docs"].setdefault(d["id"], {"id": d["id"], "title": d["title"], "kind": doc_kind(d),
                                                 "category": d["category"] or [], "count": 0})
     facets["docs"] = sorted(facets["docs"].values(), key=lambda f: (-f["count"], f["title"]))
@@ -195,6 +232,7 @@ def search_tables(
                 "SELECT id, title, source, meta, page_count, pages FROM documents"))}
         for tid in page_ids:
             items.append(_with_ref(full[tid], docs_by[full[tid]["document_id"]]))
+    _audit(items, request)
     return {"total": len(hits), "offset": offset, "limit": limit, "items": items, "facets": facets}
 
 
@@ -213,11 +251,17 @@ def _with_ref(t: dict, d: dict) -> dict:
 
 
 @router.get("/tables/{table_id}")
-def get_one(table_id: str):
+def get_one_route(table_id: str, request: Request):
+    get_table_for(request, table_id)
+    return _audit([get_one(table_id)], request)[0]
+
+
+def get_one(table_id: str) -> dict:
+    """The table with its document reference and audit names (for staff: used after every write)."""
     t = get_table(table_id)
     with db.db() as con:
         d = db.row(con.execute("SELECT * FROM documents WHERE id=?", (t["document_id"],)).fetchone())
-    return _with_ref(t, d)  # type: ignore[arg-type]
+    return auth.with_names(_with_ref(t, d))  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------- bulk + cross-doc export
@@ -228,40 +272,43 @@ class Bulk(BaseModel):
 
 
 @router.post("/tables/bulk")
-def bulk(body: Bulk):
+def bulk(body: Bulk, request: Request):
+    if body.action == "purge":
+        auth.need(request, "admin")
     marks = ",".join("?" * len(body.ids))
-    now = time.time()
-    with db.db() as con:
+    now, me = time.time(), _me()
+    with db.db() as con, db.tx(con):
         if body.action in ("valid", "invalid", "none"):
-            n = con.execute(f"UPDATE tables SET status=?, updated_at=? WHERE id IN ({marks})",
-                            (body.action, now, *body.ids)).rowcount
+            n = con.execute(f"UPDATE tables SET status=?, updated_at=?, updated_by=? WHERE id IN ({marks})",
+                            (body.action, now, me, *body.ids)).rowcount
         elif body.action == "delete":
-            n = con.execute(f"UPDATE tables SET deleted=1, deleted_at=?, updated_at=? WHERE id IN ({marks})",
-                            (now, now, *body.ids)).rowcount
+            n = con.execute(f"UPDATE tables SET deleted=1, deleted_at=?, updated_at=?, updated_by=? WHERE id IN ({marks})",
+                            (now, now, me, *body.ids)).rowcount
         elif body.action == "restore":
-            n = con.execute(f"UPDATE tables SET deleted=0, deleted_at=NULL, updated_at=? WHERE id IN ({marks})",
-                            (now, *body.ids)).rowcount
+            n = con.execute(f"UPDATE tables SET deleted=0, deleted_at=NULL, updated_at=?, updated_by=? "
+                            f"WHERE id IN ({marks})", (now, me, *body.ids)).rowcount
         else:
             con.execute(f"DELETE FROM tables WHERE joined_into IN ({marks})", body.ids)
             n = con.execute(f"DELETE FROM tables WHERE id IN ({marks})", body.ids).rowcount
     return {"ok": True, "changed": n}
 
 
-def _tables_by_ids(ids: list[str]) -> list[dict]:
+def _tables_by_ids(ids: list[str], public: bool = False) -> list[dict]:
     if not ids:
         return []
     with db.db() as con:
         ts = db.rows(con.execute(f"SELECT t.*, d.title AS document_title, d.category AS document_category "
                                  f"FROM tables t JOIN documents d "
-                                 f"ON d.id=t.document_id WHERE t.id IN ({','.join('?' * len(ids))})", ids))
+                                 f"ON d.id=t.document_id WHERE t.id IN ({','.join('?' * len(ids))})"
+                                 + (f" AND {PUBLIC_TABLE_SQL} AND d.deleted_at IS NULL" if public else ""), ids))
     order = {i: n for n, i in enumerate(ids)}
     return sorted(ts, key=lambda t: order[t["id"]])
 
 
 @router.get("/tables-export")
-def export_many(ids: str, format: Literal["xlsx", "json", "zip"] = "xlsx", numbers: bool = True,
+def export_many(request: Request, ids: str, format: Literal["xlsx", "json", "zip"] = "xlsx", numbers: bool = True,
                 decimal: Literal["auto", ",", "."] = "auto", title: bool = False):
-    ts = _tables_by_ids(_csv(ids))
+    ts = _tables_by_ids(_csv(ids), auth.is_public(request))
     if not ts:
         raise HTTPException(400, "No tables selected")
     if format == "xlsx":
@@ -274,11 +321,12 @@ def export_many(ids: str, format: Literal["xlsx", "json", "zip"] = "xlsx", numbe
 
 
 @router.get("/documents/{doc_id}/export")
-def export_document(doc_id: str, format: Literal["xlsx", "json", "zip"] = "xlsx", ids: str = "",
+def export_document(request: Request, doc_id: str, format: Literal["xlsx", "json", "zip"] = "xlsx", ids: str = "",
                     include: Literal["usable", "valid", "all"] = "usable", numbers: bool = True,
                     decimal: Literal["auto", ",", "."] = "auto", title: bool = False):
-    """usable = everything except deleted and 'not a table'; valid = only tables flagged valid."""
-    d = get_doc(doc_id)
+    """usable = everything except deleted and 'not a table'; valid = only tables flagged valid.
+    Visitors who are not logged in always get only the valid tables."""
+    d = get_doc_for(request, doc_id)
     with db.db() as con:
         ts = db.rows(con.execute("SELECT * FROM tables WHERE document_id=? AND joined_into IS NULL "
                                  "ORDER BY page, idx, created_at", (doc_id,)))
@@ -289,6 +337,8 @@ def export_document(doc_id: str, format: Literal["xlsx", "json", "zip"] = "xlsx"
         ts = [t for t in ts if not t["deleted"] and t["status"] != "invalid"]
     elif include == "valid":
         ts = [t for t in ts if not t["deleted"] and t["status"] == "valid"]
+    if auth.is_public(request):
+        ts = [t for t in ts if table_is_public(t)]
     if format == "xlsx":
         data = exporters.xlsx_bytes(ts, doc_title=d["title"], doc_category=d.get("category"), numbers=numbers,
                                     decimal=decimal, title=title)
@@ -312,11 +362,31 @@ class TablePatch(BaseModel):
     bbox: list[float] | None = Field(None, min_length=4, max_length=4)
     decimal_sep: Literal["auto", ",", "."] | None = None
     checkpoint: bool = False  # force a history entry (structural edits)
+    # the updated_at the client's copy is based on: when the table changed since (someone else saved), the
+    # patch is refused with 409 and the current table, instead of silently overwriting the other edit
+    base: float | None = None
+
+
+class Conflict(HTTPException):
+    def __init__(self, t: dict):
+        names = auth.user_names()
+        who = names.get(t.get("updated_by") or "", "someone else")
+        super().__init__(409, {"message": f"This table was changed by {who} while you were editing it.",
+                               "conflict": True, "table": get_one(t["id"])})
 
 
 @router.patch("/tables/{table_id}")
 def patch_table(table_id: str, body: TablePatch):
-    t = get_table(table_id)
+    with db.db() as con, db.tx(con):  # read, compare and write under one lock
+        t = _fresh(con, table_id)
+        if body.base is not None and abs(t["updated_at"] - body.base) > 1e-6:
+            raise Conflict(t)
+        _patch(con, t, body)
+    return get_one(table_id)
+
+
+def _patch(con, t: dict, body: TablePatch) -> bool:
+    table_id = t["id"]
     sets: dict[str, object] = {}
     if body.title is not None:
         sets["title"] = body.title.strip()
@@ -344,41 +414,45 @@ def patch_table(table_id: str, body: TablePatch):
         sets.update(rows=db.dumps(rows), merges=db.dumps(merges), header_rows=header,
                     edited=int(is_edited(rows, merges, t)))
     if not sets:
-        return get_one(table_id)
+        return False
     sets["updated_at"] = time.time()
-    with db.db() as con:
-        if content:
-            last = con.execute("SELECT created_at FROM table_versions WHERE table_id=? ORDER BY id DESC LIMIT 1",
-                               (table_id,)).fetchone()
-            if body.checkpoint or not last or time.time() - last["created_at"] > VERSION_GAP_S:
-                _snapshot(con, t, "edit")
-        con.execute(f"UPDATE tables SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?", (*sets.values(), table_id))
-        _touch_doc(con, t["document_id"])
-    return get_one(table_id)
+    sets["updated_by"] = _me()
+    if content:
+        last = con.execute("SELECT created_at, created_by FROM table_versions WHERE table_id=? ORDER BY id DESC LIMIT 1",
+                           (table_id,)).fetchone()
+        # autosaves collapse into one history entry, but not across users (each keeps their own state)
+        if body.checkpoint or not last or time.time() - last["created_at"] > VERSION_GAP_S \
+                or t.get("updated_by") != sets["updated_by"]:
+            _snapshot(con, t, "edit")
+    con.execute(f"UPDATE tables SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?", (*sets.values(), table_id))
+    _touch_doc(con, t["document_id"])
+    return True
 
 
 @router.post("/tables/{table_id}/reset")
 def reset_table(table_id: str):
     """Back to the extracted version (the current state is kept in history)."""
-    t = get_table(table_id)
-    with db.db() as con:
+    with db.db() as con, db.tx(con):
+        t = _fresh(con, table_id)
         vid = _snapshot(con, t, "before reset")
         con.execute("UPDATE tables SET rows=original_rows, merges=original_merges, edited=0, "
-                    "header_rows=?, updated_at=? WHERE id=?",
-                    (jobs.guess_header_rows(t["original_rows"]), time.time(), table_id))
+                    "header_rows=?, updated_at=?, updated_by=? WHERE id=?",
+                    (jobs.guess_header_rows(t["original_rows"]), time.time(), _me(), table_id))
     return get_one(table_id) | {"undo_version": vid}
 
 
 @router.delete("/tables/{table_id}")
-def delete_table(table_id: str, purge: bool = False):
-    """Soft delete (flag 'deleted', restorable). purge=true removes it for good."""
+def delete_table(table_id: str, request: Request, purge: bool = False):
+    """Soft delete (flag 'deleted', restorable). purge=true (admin) removes it for good."""
+    if purge:
+        auth.need(request, "admin")
     t = get_table(table_id)
-    with db.db() as con:
+    with db.db() as con, db.tx(con):
         if purge:
             con.execute("DELETE FROM tables WHERE id=? OR joined_into=?", (table_id, table_id))
         else:
-            con.execute("UPDATE tables SET deleted=1, deleted_at=?, updated_at=? WHERE id=?",
-                        (time.time(), time.time(), table_id))
+            con.execute("UPDATE tables SET deleted=1, deleted_at=?, updated_at=?, updated_by=? WHERE id=?",
+                        (time.time(), time.time(), _me(), table_id))
         _touch_doc(con, t["document_id"])
     return {"ok": True, "purged": purge}
 
@@ -387,15 +461,17 @@ def delete_table(table_id: str, purge: bool = False):
 def versions(table_id: str):
     get_table(table_id)
     with db.db() as con:
-        return db.rows(con.execute(
-            "SELECT id, rows, merges, header_rows, reason, created_at FROM table_versions "
+        vs = db.rows(con.execute(
+            "SELECT id, rows, merges, header_rows, reason, created_at, created_by FROM table_versions "
             "WHERE table_id=? ORDER BY id", (table_id,)))
+    names = auth.user_names()
+    return [auth.with_names(v, names) for v in vs]
 
 
 @router.post("/tables/{table_id}/versions/{version_id}/restore")
 def restore_version(table_id: str, version_id: int):
-    t = get_table(table_id)
-    with db.db() as con:
+    with db.db() as con, db.tx(con):
+        t = _fresh(con, table_id)
         v = db.row(con.execute("SELECT * FROM table_versions WHERE id=? AND table_id=?",
                                (version_id, table_id)).fetchone())
         if not v:
@@ -407,10 +483,10 @@ def restore_version(table_id: str, version_id: int):
                         (db.dumps(o["original_rows"]), db.dumps(o["original_merges"]), o["engine"], table_id))
             t = {**t, "original_rows": o["original_rows"], "original_merges": o["original_merges"]}
         con.execute("UPDATE tables SET rows=?, merges=?, header_rows=?, edited=?, bbox=COALESCE(?, bbox), "
-                    "updated_at=? WHERE id=?",
+                    "updated_at=?, updated_by=? WHERE id=?",
                     (db.dumps(v["rows"]), db.dumps(v["merges"]), v["header_rows"],
                      int(is_edited(v["rows"], v["merges"], t)), db.dumps(v["bbox"]) if v.get("bbox") else None,
-                     time.time(), table_id))
+                     time.time(), _me(), table_id))
     return get_one(table_id) | {"undo_version": vid}
 
 
@@ -432,6 +508,7 @@ async def reextract(table_id: str, body: Reextract):
     clip = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
     if clip[2] - clip[0] < 4 or clip[3] - clip[1] < 4:
         raise HTTPException(400, "Region is too small")
+    me = _me()  # the worker thread below has no request context of its own
 
     def run():
         pdf = open_pdf(pdf_path(t["document_id"]))
@@ -452,14 +529,15 @@ async def reextract(table_id: str, body: Reextract):
                 rows += [r + [""] * (width - len(r)) for r in x.rows]
         else:
             rows, merges = best.rows, best.merges
-        with db.db() as con:
-            vid = _snapshot(con, t, "before re-extract")
+        with db.db() as con, db.tx(con):
+            cur = _fresh(con, table_id)  # the version as it is now (it may have been saved meanwhile)
+            vid = _snapshot(con, cur, "before re-extract")
             con.execute(
                 "UPDATE tables SET rows=?, original_rows=?, merges=?, original_merges=?, header_rows=?, bbox=?, "
                 "engine=?, edited=0, title=CASE WHEN title='' THEN ? ELSE title END, "
-                "notes=CASE WHEN notes='' THEN ? ELSE notes END, updated_at=? WHERE id=?",
+                "notes=CASE WHEN notes='' THEN ? ELSE notes END, updated_at=?, updated_by=? WHERE id=?",
                 (db.dumps(rows), db.dumps(rows), db.dumps(merges), db.dumps(merges), jobs.guess_header_rows(rows),
-                 db.dumps(list(clip)), best.engine, best.title, best.notes, time.time(), table_id))
+                 db.dumps(list(clip)), best.engine, best.title, best.notes, time.time(), me, table_id))
             _touch_doc(con, t["document_id"])
         return get_one(table_id) | {"undo_version": vid}
 
@@ -467,9 +545,9 @@ async def reextract(table_id: str, body: Reextract):
 
 
 @router.get("/tables/{table_id}/export")
-def export_table(table_id: str, format: Literal["csv", "xlsx", "json"] = "csv", numbers: bool = True,
+def export_table(request: Request, table_id: str, format: Literal["csv", "xlsx", "json"] = "csv", numbers: bool = True,
                  decimal: Literal["auto", ",", "."] = "auto", title: bool = False):
-    t = get_table(table_id)
+    t = get_table_for(request, table_id)
     d = get_doc(t["document_id"])
     name = f"{d['title'][:50]} p{t['page']} {t['title'][:40]}"
     if format == "csv":
@@ -483,11 +561,11 @@ def export_table(table_id: str, format: Literal["csv", "xlsx", "json"] = "csv", 
 
 
 @router.get("/tables/{table_id}/snapshot.png")
-def snapshot(table_id: str, scale: float = Query(1.5, ge=0.5, le=3.0), pad: float = Query(8, ge=0, le=100),
+def snapshot(request: Request, table_id: str, scale: float = Query(1.5, ge=0.5, le=3.0), pad: float = Query(8, ge=0, le=100),
              part: int = Query(0, ge=0)):
     """The table's region rendered from the PDF (pdfspine), for previews and side-by-side checking.
     part=N renders the N-th joined continuation (1-based) instead of the main region."""
-    t = get_table(table_id)
+    t = get_table_for(request, table_id)
     if part:
         if part > len(t["parts"]):
             raise HTTPException(404, "No such part")
@@ -626,17 +704,20 @@ def join(table_id: str, body: Join):
 
 def _save_join(t: dict, o: dict, rows: list[list[str]], merges: list[list[int]], parts: list[dict]) -> dict:
     table_id = t["id"]
-    now = time.time()
-    with db.db() as con:
+    now, me = time.time(), _me()
+    with db.db() as con, db.tx(con):
+        cur, oc = _fresh(con, table_id), _fresh(con, o["id"])
+        if cur["updated_at"] != t["updated_at"] or oc["updated_at"] != o["updated_at"] or oc["joined_into"]:
+            raise HTTPException(409, "One of the tables changed meanwhile. Try joining again.")
         _snapshot(con, t, f"before join {o['id']}")
         con.execute(
             "UPDATE tables SET rows=?, merges=?, parts=?, edited=?, "
             "title=CASE WHEN title='' THEN ? ELSE title END, notes=CASE WHEN notes='' THEN ? ELSE notes END, "
-            "updated_at=? WHERE id=?",
+            "updated_at=?, updated_by=? WHERE id=?",
             (db.dumps(rows), db.dumps(merges), db.dumps(parts), int(is_edited(rows, merges, t)), o["title"],
-             o["notes"], now, table_id))
-        con.execute("UPDATE tables SET joined_into=?, deleted=1, deleted_at=?, updated_at=? WHERE id=?",
-                    (table_id, now, now, o["id"]))
+             o["notes"], now, me, table_id))
+        con.execute("UPDATE tables SET joined_into=?, deleted=1, deleted_at=?, updated_at=?, updated_by=? WHERE id=?",
+                    (table_id, now, now, me, o["id"]))
         _touch_doc(con, t["document_id"])
     return get_one(table_id)
 
@@ -649,11 +730,11 @@ class Unjoin(BaseModel):
 def unjoin(table_id: str, body: Unjoin):
     """Undo a join: the table goes back to its state right before `other` was appended
     (later joins and edits made after it are undone too), and the continuation tables come back."""
-    t = get_table(table_id)
-    idx = next((i for i, p in enumerate(t["parts"]) if p["table_id"] == body.other), None)
-    if idx is None:
-        raise HTTPException(404, "That table is not joined here")
-    with db.db() as con:
+    with db.db() as con, db.tx(con):
+        t = _fresh(con, table_id)
+        idx = next((i for i, p in enumerate(t["parts"]) if p["table_id"] == body.other), None)
+        if idx is None:
+            raise HTTPException(404, "That table is not joined here")
         v = db.row(con.execute("SELECT * FROM table_versions WHERE table_id=? AND reason=? ORDER BY id DESC LIMIT 1",
                                (table_id, f"before join {body.other}")).fetchone())
         if v:
@@ -671,13 +752,13 @@ def unjoin(table_id: str, body: Unjoin):
             header = t["header_rows"]
         _snapshot(con, t, "before unjoin")
         released = [p["table_id"] for p in t["parts"][idx:]]
-        con.execute("UPDATE tables SET rows=?, merges=?, header_rows=?, parts=?, edited=?, updated_at=? WHERE id=?",
-                    (db.dumps(rows), db.dumps(merges), header, db.dumps(t["parts"][:idx]),
-                     int(is_edited(rows, merges, t)), time.time(), table_id))
+        con.execute("UPDATE tables SET rows=?, merges=?, header_rows=?, parts=?, edited=?, updated_at=?, updated_by=? "
+                    "WHERE id=?", (db.dumps(rows), db.dumps(merges), header, db.dumps(t["parts"][:idx]),
+                                   int(is_edited(rows, merges, t)), time.time(), _me(), table_id))
         if released:
-            con.execute(f"UPDATE tables SET joined_into=NULL, deleted=0, deleted_at=NULL, updated_at=? "
+            con.execute(f"UPDATE tables SET joined_into=NULL, deleted=0, deleted_at=NULL, updated_at=?, updated_by=? "
                         f"WHERE joined_into=? AND id IN ({','.join('?' * len(released))})",
-                        (time.time(), table_id, *released))
+                        (time.time(), _me(), table_id, *released))
         _touch_doc(con, t["document_id"])
     return get_one(table_id)
 

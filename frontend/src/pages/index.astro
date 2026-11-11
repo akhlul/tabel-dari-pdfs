@@ -13,13 +13,13 @@ import Icon from '../components/Icon.astro';
         <span class="absolute left-2.5 top-2 text-ink-400" aria-hidden="true"><Icon name="search" class="size-4" /></span>
         <input id="filter" type="search" aria-label="Filter documents by title" class="field w-64 pl-8" placeholder="Filter by title" />
       </div>
-      <a href="/search" class="btn-line"><Icon name="search" />Search BPS</a>
-      <button id="pick" class="btn-primary"><Icon name="upload" />Upload PDF…</button>
+      <a href="/search" class="btn-line" data-need="editor"><Icon name="search" />Search BPS</a>
+      <button id="pick" class="btn-primary" data-need="editor"><Icon name="upload" />Upload PDF…</button>
       <input id="file" type="file" accept="application/pdf,.pdf" multiple class="hidden" aria-hidden="true" tabindex="-1" />
     </div>
   </div>
 
-  <div id="drop" class="panel border-dashed border-ink-300 flex flex-wrap items-center gap-grid px-4 py-2.5 mb-5 transition-colors">
+  <div id="drop" data-need="editor" class="panel border-dashed border-ink-300 flex flex-wrap items-center gap-grid px-4 py-2.5 mb-5 transition-colors">
     <span class="grid place-items-center size-8 bg-brand-50 text-brand-700 border border-brand-100" aria-hidden="true"><Icon name="upload" class="size-4" /></span>
     <div class="flex-1 min-w-60">
       <div class="text-[13px] font-medium text-ink-900">Drop PDF files here to upload them</div>
@@ -39,7 +39,7 @@ import Icon from '../components/Icon.astro';
       <div id="tree" role="tree" aria-label="Categories" class="flex-1 min-h-0 overflow-y-auto py-1 text-[13px]">
         {Array.from({ length: 6 }).map(() => <div class="px-4 py-1.5"><div class="skeleton h-4 w-3/4"></div></div>)}
       </div>
-      <p class="px-4 py-2 border-t border-ink-100 text-[11px] text-ink-500">Drag documents onto a category to move them. Right-click a category to rename it.</p>
+      <p data-need="editor" class="px-4 py-2 border-t border-ink-100 text-[11px] text-ink-500">Drag documents onto a category to move them. Right-click a category to rename it.</p>
     </aside>
 
     <section class="flex-1 min-w-0" aria-label="Documents">
@@ -51,7 +51,7 @@ import Icon from '../components/Icon.astro';
           <Icon name="filter" class="size-3.5 text-ink-500" />Year
           <select id="year" class="field h-8 text-[12.5px] min-w-32"><option value="">All years</option></select>
         </label>
-        <span id="selbar" class="hidden items-center gap-md text-[12.5px] text-ink-700">
+        <span id="selbar" data-need="editor" class="hidden items-center gap-md text-[12.5px] text-ink-700">
           <span id="selcount" class="font-medium"></span>
           <button id="sel-move" class="btn-line btn-sm"><Icon name="folder" class="size-3.5" />Move to Category…</button>
           <button id="sel-clear" class="btn-ghost btn-sm">Clear</button>
@@ -72,8 +72,9 @@ import Icon from '../components/Icon.astro';
       <div id="empty" class="hidden panel px-6 py-16 text-center">
         <div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3" aria-hidden="true"><Icon name="file" class="size-6" /></div>
         <h2 class="font-medium text-ink-900">No documents yet</h2>
-        <p class="text-[13px] text-ink-600 mt-1 mb-4">Upload a PDF, or import a publication or press release from BPS.</p>
-        <div class="flex justify-center gap-lg">
+        <p data-need="editor" class="text-[13px] text-ink-600 mt-1 mb-4">Upload a PDF, or import a publication or press release from BPS.</p>
+        <p data-need="public" class="text-[13px] text-ink-600 mt-1">No tables have been checked and marked valid yet. <a href="/login" class="text-brand-600 hover:underline">Log in</a> to work on the library.</p>
+        <div data-need="editor" class="flex justify-center gap-lg">
           <button id="pick2" class="btn-primary"><Icon name="upload" />Upload PDF…</button>
           <a href="/search" class="btn-line"><Icon name="search" />Search BPS</a>
         </div>
@@ -87,6 +88,7 @@ import Icon from '../components/Icon.astro';
   import { $, $$, esc, fmtBytes, ago, toast, toastError, plural, KIND_LABEL, debounce, contextMenu, isMenuKey } from '../lib/ui';
   import { icon } from '../lib/icons';
   import { getSettings } from '../lib/settings';
+  import { canEdit, me } from '../lib/auth';
   import { UNCAT, SEP, buildTree, allPaths, catLabel, categoryDialog, isUnder, pathKey, type CatNode } from '../lib/categories';
 
   const list = $('#list'), empty = $('#empty'), count = $('#count'), tree = $('#tree');
@@ -223,7 +225,7 @@ import Icon from '../components/Icon.astro';
 
   function nodeMenu(at: MouseEvent | HTMLElement, n: HTMLElement) {
     const s = nodeSel(n);
-    if (!Array.isArray(s)) return contextMenu(at, [{ label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) }]);
+    if (!Array.isArray(s) || !canEdit()) return contextMenu(at, [{ label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) }]);
     contextMenu(at, [
       { heading: catLabel(s) },
       { label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) },
@@ -314,8 +316,8 @@ import Icon from '../components/Icon.astro';
     const kind = kindOf(d);
     const fallback = d.source === 'bps' && d.meta.cover ? d.meta.cover : '';
     const on = picked.has(d.id);
-    return `<article data-doc="${d.id}" draggable="true" class="group panel p-4 flex gap-grid hover:border-brand-500 focus-within:border-brand-500 transition-colors relative ${on ? '!border-brand-500 bg-brand-50/40' : ''}">
-      <input type="checkbox" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}"
+    return `<article data-doc="${d.id}" draggable="${canEdit()}" class="group panel p-4 flex gap-grid hover:border-brand-500 focus-within:border-brand-500 transition-colors relative ${on ? '!border-brand-500 bg-brand-50/40' : ''}">
+      <input type="checkbox" data-pick="${d.id}" data-need="editor" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}"
         class="absolute top-2 left-2 z-10 accent-brand-700 ${on || picked.size ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}" />
       <div class="w-20 h-28 shrink-0 bg-ink-100 border border-ink-200 overflow-hidden">
         <img src="${api.thumbUrl(d.id)}" loading="lazy" alt="" draggable="false" class="w-full h-full object-cover object-top"
@@ -334,7 +336,7 @@ import Icon from '../components/Icon.astro';
           <span class="ml-auto">${ago(d.updated_at)}</span>
         </div>
       </div>
-      <div class="absolute top-2 right-2 z-10 flex">
+      <div data-need="editor" class="absolute top-2 right-2 z-10 flex">
         <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
         <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button>
       </div>
@@ -343,8 +345,8 @@ import Icon from '../components/Icon.astro';
 
   function row(d: Doc) {
     const on = picked.has(d.id);
-    return `<tr data-doc="${d.id}" draggable="true" class="group border-t border-ink-100 hover:bg-ink-50 ${on ? 'bg-brand-50/60' : ''}">
-      <td class="w-8 pl-3"><input type="checkbox" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}" class="accent-brand-700" /></td>
+    return `<tr data-doc="${d.id}" draggable="${canEdit()}" class="group border-t border-ink-100 hover:bg-ink-50 ${on ? 'bg-brand-50/60' : ''}">
+      <td class="w-8 pl-3"><input type="checkbox" data-need="editor" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}" class="accent-brand-700" /></td>
       <td class="py-1.5 pr-3 min-w-0"><div class="flex items-center gap-md">
         <a href="/doc?id=${d.id}" draggable="false" class="text-ink-900 font-medium hover:text-brand-700 hover:underline line-clamp-2">${esc(d.title)}</a>${badgeOf(d)}</div></td>
       <td class="px-2 whitespace-nowrap text-ink-600">${KIND_LABEL[kindOf(d)] ?? ''}</td>
@@ -352,7 +354,7 @@ import Icon from '../components/Icon.astro';
       <td class="px-2 text-right tabular-nums">${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="text-emerald-700 font-medium hover:underline">${d.valid_count}</a>` : '<span class="text-ink-400">0</span>'}</td>
       <td class="px-2 text-right tabular-nums text-ink-600">${d.page_count}</td>
       <td class="px-2 whitespace-nowrap text-ink-500">${ago(d.updated_at)}</td>
-      <td class="pr-2 whitespace-nowrap text-right">
+      <td class="pr-2 whitespace-nowrap text-right" data-need="editor">
         <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
         <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button></td>
     </tr>`;
@@ -489,10 +491,10 @@ import Icon from '../components/Icon.astro';
   const drop = $('#drop');
   const isFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
   const isDocs = (e: DragEvent) => !!e.dataTransfer?.types.includes(DOC_MIME);
-  addEventListener('dragover', (e) => { if (isFiles(e)) { e.preventDefault(); drop.classList.add('!border-brand-500', '!bg-brand-50'); } });
+  addEventListener('dragover', (e) => { if (isFiles(e) && canEdit()) { e.preventDefault(); drop.classList.add('!border-brand-500', '!bg-brand-50'); } });
   addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('!border-brand-500', '!bg-brand-50'); });
   addEventListener('drop', (e) => {
-    if (!isFiles(e)) return;
+    if (!isFiles(e) || !canEdit()) return;
     e.preventDefault(); drop.classList.remove('!border-brand-500', '!bg-brand-50');
     if (e.dataTransfer?.files.length) upload(e.dataTransfer.files);
   });
@@ -568,6 +570,7 @@ import Icon from '../components/Icon.astro';
     const d = docs.find((x) => x.id === id);
     if (!d) return;
     const many = picked.has(id) && picked.size > 1;
+    if (!canEdit()) return contextMenu(at, [{ heading: d.title }, { label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) }]);
     contextMenu(at, [
       { heading: many ? `${picked.size} documents` : d.title },
       ...(many ? [] : [{ label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) }]),
@@ -590,4 +593,7 @@ import Icon from '../components/Icon.astro';
   addEventListener('popstate', () => { readUrl(); render(); });
   readUrl();
   load();
+  // logged in / out in another tab, or the session ended: reload the list (visitors see fewer documents)
+  me();
+  addEventListener('tdp-role', () => load());
 </script>

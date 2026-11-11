@@ -64,6 +64,10 @@ const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', '
   import { $, $$, esc, fmtBytes, fmtDate, toast } from '../lib/ui';
   import { icon } from '../lib/icons';
   import { getSettings, lastSearch, rememberSearch, defaultRegion, type SearchFilters } from '../lib/settings';
+  import { me, loginUrl } from '../lib/auth';
+
+  // importing from BPS is for editors: visitors are sent to the login page
+  me().then((m) => { if (!m.user) location.replace(loginUrl()); });
 
   // filters: the URL (a shared / reloaded search) > the last search in this browser (never its keyword) > settings
   const params = new URLSearchParams(location.search);

@@ -149,6 +149,62 @@ The UI follows the [KDE Human Interface Guidelines](https://develop.kde.org/hig/
 [DESIGN.md](DESIGN.md) for colors, components, feedback (undo, errors, progress), wording, keyboard shortcuts, layout
 and the accessibility check (`mise run check:a11y`).
 
+## Login and access
+
+| who | can |
+|-----|-----|
+| visitor (not logged in) | read tables **flagged valid** (Library, Tables, the workspace read-only), export them, `/api/v1` |
+| `editor` | everything with the library: import, upload, extract, edit, flag, delete, categories |
+| `admin` | also users (`/users`), backup / restore, permanent deletes |
+
+Two ways to log in (`backend/app/auth.py`):
+
+- **user name + password**: the first admin is created at startup from `ADMIN_USER` / `ADMIN_PASSWORD` in `.env`
+  (only when that user does not exist yet; later changes go through the app or the CLI below);
+- **Google**: set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `PUBLIC_URL`. Only e-mail addresses an admin has added
+  under Users can log in; anyone else gets "no access". In the Google Cloud console (OAuth client, type *Web application*)
+  add the redirect URI `<PUBLIC_URL>/api/auth/google/callback`, e.g.
+  `https://tabel-dari-pdf.statapps.dev/api/auth/google/callback`.
+
+A user can have both (a user name with a password, and a Google e-mail). Users and sessions live in `data/auth.db`,
+separate from `library.db`: a backup never contains password hashes and a restore never removes accounts. Sessions are an
+`HttpOnly; SameSite=Lax` cookie (`Secure` over https), valid `SESSION_DAYS` (7) after the last visit. Every `/api`
+route needs an editor unless it is on the public list in `auth.py` (deny by default); writes from other sites are refused
+(CSRF); visitors are rate-limited per IP (`RATE_PUBLIC`, `RATE_PUBLIC_FILES` per minute), failed logins 5 per minute.
+
+Behind a reverse proxy, uvicorn must trust its `X-Forwarded-For` / `X-Forwarded-Proto` only from that proxy
+(`--forwarded-allow-ips=<proxy IP>`), otherwise visitors can fake their IP (rate limit) and https (Secure cookie).
+
+```bash
+cd backend && uv run python -m app.auth create-admin NAME     # Docker: docker compose exec app python -m app.auth ...
+uv run python -m app.auth set-password NAME                   # forgotten password (also logs the user out)
+uv run python -m app.auth list
+```
+
+### Several people at once
+
+- **One extraction job per document**: starting a second one (or extracting a whole page) while a job runs gives `409`
+  with the running job, and the UI follows that job ("started by …"). Each user may have `JOBS_PER_USER` (2) documents
+  queued or running at once; the server runs `JOB_WORKERS` (2) of them at the same time, the rest wait in line.
+- **No silent overwrites**: the editor sends `base` (the `updated_at` its copy is based on) with every save; when someone
+  else saved the table meanwhile the save is refused (`409`, with the current table) and the editor asks: keep my change
+  (only the fields I changed are written) or use their version. Saves of one table are sent one after another.
+- Writes take the SQLite write lock at their start (`BEGIN IMMEDIATE`), so a second writer waits instead of failing,
+  and read-compare-write steps (version check, join, re-extract) cannot interleave.
+- **Who did what**: `created_by` / `updated_by` on documents and tables, `created_by` on jobs and history versions
+  (user ids from `auth.db`; the API adds `*_by_name` for logged-in users, visitors never see them).
+- The same PDF uploaded twice at the same moment, or the same BPS item imported twice, becomes one document.
+
+### Public JSON API (`/api/v1`, no login, CORS open, only tables flagged valid)
+
+```
+GET /api/v1/documents?q=&offset=&limit=           documents with valid tables
+GET /api/v1/documents/{id}/tables?decimal=        all valid tables of a document, with columns, rows and records
+GET /api/v1/tables?q=&document=&offset=&limit=    valid tables (no cells): id, title, page, columns, row_count, url
+GET /api/v1/tables/{id}?decimal=auto|,|.          one table: columns, rows, records (numbers parsed), merges, document
+```
+Responses have an `ETag` (send `If-None-Match` for a 304) and `Cache-Control: max-age=60`.
+
 ## API (short)
 
 ```
@@ -173,6 +229,9 @@ GET  /api/tables/{id}/snapshot.png               (PDF region, rendered by pdfspi
 GET  /api/tables/{id}/export?format=csv|xlsx|json
 GET  /api/tables-export?ids=a,b&format=xlsx|zip|json
 GET  /api/documents/{id}/export?format=xlsx|zip|json&include=usable|valid|all&decimal=auto|,|.&title=false
+GET  /api/auth/me    POST /api/auth/login {username,password}    POST /api/auth/logout    POST /api/auth/password {current,new}
+GET  /api/auth/google/start?next=/path    GET /api/auth/google/callback
+GET  /api/users      POST /api/users {username?,email?,name,role,password?}    PATCH|DELETE /api/users/{id}   (admin)
 ```
 **Categories.** Documents carry a category path of any depth (`["Statistik Ekonomi", "Transportasi"]`, `[]` = Uncategorized),
 shown as a tree in the Library. BPS imports are filed automatically under the BPS subject classification (CSA: subject

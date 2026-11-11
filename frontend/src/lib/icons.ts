@@ -50,6 +50,11 @@ const P: Record<string, string> = {
   folderOpen: '<path d="M3 19V5h6l2 2h8v3"/><path d="M3 19 6 10h16l-3 9z"/>',
   inbox: '<path d="M3 13h5l1 3h6l1-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h1M3 12h1M3 18h1"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.8 2.9-6 6.5-6s6.5 2.2 6.5 6"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14.4c2.1.7 3.5 2.6 3.5 5.6"/>',
+  login: '<path d="M14 4h6v16h-6"/><path d="M3 12h11"/><path d="m10 8 4 4-4 4"/>',
+  logout: '<path d="M10 4H4v16h6"/><path d="M9 12h12"/><path d="m17 8 4 4-4 4"/>',
+  lock: '<rect x="4" y="10" width="16" height="11"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
 };
 

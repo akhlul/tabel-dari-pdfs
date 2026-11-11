@@ -1,3 +1,5 @@
+import { sessionLost, type User } from './auth';
+
 export type BBox = [number, number, number, number];
 
 export interface Doc {
@@ -32,6 +34,7 @@ export interface Job {
   error: string | null;
   created_at: number;
   finished_at: number | null;
+  created_by_name?: string | null;
 }
 
 export type Status = 'none' | 'valid' | 'invalid';
@@ -61,6 +64,9 @@ export interface Table {
   deleted: boolean;
   deleted_at: number | null;
   updated_at: number;
+  /** who created / last changed it (staff only; null = before logins existed) */
+  created_by_name?: string | null;
+  updated_by_name?: string | null;
   parts: Part[];
   joined_into: string | null;
   state?: State;
@@ -81,7 +87,7 @@ export interface TableRef {
   source_pdf: string | null; date: string | null; bps_id: string | null; domain: string | null;
 }
 
-export interface Version { id: number; rows: string[][]; merges: Merge[]; header_rows: number; reason: string; created_at: number }
+export interface Version { id: number; rows: string[][]; merges: Merge[]; header_rows: number; reason: string; created_at: number; created_by_name?: string | null }
 
 export interface TableSearch {
   total: number; offset: number; limit: number; items: Table[];
@@ -100,7 +106,11 @@ export interface RestoreResult {
 
 export type DecimalSep = 'auto' | ',' | '.';
 
-export type TablePatch = Partial<Pick<Table, 'title' | 'notes' | 'rows' | 'merges' | 'header_rows' | 'status' | 'deleted' | 'bbox' | 'decimal_sep'>> & { checkpoint?: boolean };
+export type TablePatch = Partial<Pick<Table, 'title' | 'notes' | 'rows' | 'merges' | 'header_rows' | 'status' | 'deleted' | 'bbox' | 'decimal_sep'>> & {
+  checkpoint?: boolean;
+  /** updated_at of the copy the edit is based on: 409 (ApiError.data.conflict) when someone else saved meanwhile */
+  base?: number;
+};
 
 export interface Engine { id: string; label: string; description: string; available: boolean; note: string }
 
@@ -126,7 +136,8 @@ export interface ImportState {
 export interface Domain { id: string; name: string; url: string }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  /** data: the rest of the error body, e.g. {conflict, table} for 409 on a table, {job} for a running job */
+  constructor(public status: number, message: string, public data: any = null) { super(message); }
 }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -144,11 +155,16 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
+    let data: any = null;
     try {
       const j = await res.json();
-      if (j.detail) msg = typeof j.detail === 'string' ? j.detail : j.detail.map((d: any) => d.msg).join('; ');
+      if (typeof j.detail === 'string') msg = j.detail;
+      else if (Array.isArray(j.detail)) msg = j.detail.map((d: any) => d.msg).join('; ');
+      else if (j.detail?.message) { msg = j.detail.message; data = j.detail; }
+      if (j.job) data = { ...data, job: j.job };
     } catch { /* not json */ }
-    throw new ApiError(res.status, msg);
+    if (res.status === 401) sessionLost(); // logged out meanwhile (expired, or blocked by an admin)
+    throw new ApiError(res.status, msg, data);
   }
   return res.json() as Promise<T>;
 }
@@ -186,7 +202,10 @@ export const api = {
         let body: any = null;
         try { body = JSON.parse(x.responseText); } catch { /* not json */ }
         if (x.status >= 200 && x.status < 300) resolve(body);
-        else reject(new ApiError(x.status, body?.detail ?? `Upload failed (HTTP ${x.status})`));
+        else {
+          if (x.status === 401) sessionLost();
+          reject(new ApiError(x.status, body?.detail ?? `Upload failed (HTTP ${x.status})`));
+        }
       };
       x.onerror = () => reject(new ApiError(0, 'The server is not reachable. Check that it is running, then retry.'));
       x.send(f);
@@ -248,7 +267,17 @@ export const api = {
     req<{ existing: true; document: Doc } | { existing: false; import: ImportState }>('POST', '/api/bps/import', p),
   importStatus: (id: string) => req<ImportState>('GET', `/api/bps/import/${id}`),
   importCancel: (id: string) => req<{ ok: true }>('POST', `/api/bps/import/${id}/cancel`),
+
+  // admin: users (password login and / or Google login by e-mail)
+  users: () => req<User[]>('GET', '/api/users'),
+  createUser: (u: UserInput) => req<User>('POST', '/api/users', u),
+  patchUser: (id: string, u: UserPatch) => req<User>('PATCH', `/api/users/${id}`, u),
+  deleteUser: (id: string) => req<{ ok: true }>('DELETE', `/api/users/${id}`),
+  logoutUser: (id: string) => req<{ ok: true }>('POST', `/api/users/${id}/logout`),
 };
+
+export interface UserInput { username?: string | null; email?: string | null; name?: string; role: 'editor' | 'admin'; password?: string | null }
+export type UserPatch = Partial<Omit<UserInput, 'role'>> & { role?: 'editor' | 'admin'; active?: boolean; remove_password?: boolean; unlink_google?: boolean };
 
 /** plain-language names for extraction methods (HIG: no jargon) */
 export const ENGINE_NAME: Record<string, string> = {

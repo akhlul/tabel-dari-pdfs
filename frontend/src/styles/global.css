@@ -368,3 +368,8 @@
   body > :not(#small-screen) { display: none !important; }
   body { overflow: hidden; }
 }
+
+/* login roles (lib/auth.ts): <html data-role="public|editor|admin">; visitors see a read-only app */
+html:not([data-role="editor"]):not([data-role="admin"]) [data-need="editor"],
+html:not([data-role="admin"]) [data-need="admin"],
+html:not([data-role="public"]) [data-need="public"] { display: none !important; }

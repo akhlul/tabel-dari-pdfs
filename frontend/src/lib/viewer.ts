@@ -39,6 +39,8 @@ export class PdfViewer {
   zoom = 1;
   fit = true;
   drawMode = false;
+  /** visitors who are not logged in: boxes can be selected, not moved or resized */
+  readonly = false;
   /** "Select Text": table boxes let the pointer through so text inside them can be selected */
   textMode = false;
   showBoxes = true;
@@ -267,11 +269,11 @@ export class PdfViewer {
         this.place(b, pv, t.bbox);
         const flag = state === 'valid' ? ' · ✓ valid' : state === 'invalid' ? ' · ⊘ not a table' : state === 'deleted' ? ' · deleted' : '';
         b.innerHTML = `<span class="tag" aria-hidden="true">T${i + 1}${flag}${t.edited ? ' · edited' : ''}</span>`
-          + ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h) => `<i class="hdl" data-h="${h}" aria-hidden="true"></i>`).join('');
+          + (this.readonly ? '' : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h) => `<i class="hdl" data-h="${h}" aria-hidden="true"></i>`).join(''));
         b.tabIndex = 0;
         b.setAttribute('role', 'button');
         // accessible name starts with the visible tag text (WCAG label-in-name)
-        b.setAttribute('aria-label', `T${i + 1}${flag}${t.edited ? ' · edited' : ''}: ${t.title || 'untitled table'}, page ${pv.n}${t.id === this.active ? '. Selected: arrow keys move, Shift+arrow keys resize' : ''}`);
+        b.setAttribute('aria-label', `T${i + 1}${flag}${t.edited ? ' · edited' : ''}: ${t.title || 'untitled table'}, page ${pv.n}${t.id === this.active && !this.readonly ? '. Selected: arrow keys move, Shift+arrow keys resize' : ''}`);
         b.setAttribute('aria-pressed', String(t.id === this.active));
         if (this.drawMode) b.style.pointerEvents = 'none';
         this.bindBox(b, pv, t);
@@ -326,7 +328,7 @@ export class PdfViewer {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (t.id !== this.active) this.ev.onSelect?.(t.id); return; }
       const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
       const d = dirs[e.key];
-      if (!d || t.id !== this.active) return;
+      if (!d || t.id !== this.active || this.readonly) return;
       e.preventDefault();
       const step = e.altKey ? 0.5 : 2; // points
       let [x0, y0, x1, y1] = kbBox ?? ([...t.bbox] as BBox);
@@ -351,6 +353,7 @@ export class PdfViewer {
       if (this.drawMode || e.button !== 0) return;
       e.stopPropagation();
       if (t.id !== this.active) { this.ev.onSelect?.(t.id); return; }
+      if (this.readonly) return;
       e.preventDefault();
       const handle = (e.target as HTMLElement).dataset.h ?? 'move';
       const rect = pv.overlay.getBoundingClientRect();

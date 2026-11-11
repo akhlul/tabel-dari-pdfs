@@ -25,11 +25,12 @@ import Icon from '../components/Icon.astro';
   <div class="flex gap-grid items-start">
     <!-- filters -->
     <aside class="w-80 shrink-0 panel sticky top-4 max-h-[calc(100dvh-2rem)] overflow-y-auto" aria-label="Filters">
-      <fieldset class="min-w-0 px-2 pt-3 pb-2">
+      <fieldset data-need="editor" class="min-w-0 px-2 pt-3 pb-2">
         <legend class="flex w-full items-center px-2 mb-1"><span class="label !mb-0">Flag</span></legend>
         <div id="f-state"></div>
       </fieldset>
-      <div class="border-t border-ink-100 px-2 py-2" id="f-edited"></div>
+      <div data-need="editor" class="border-t border-ink-100 px-2 py-2" id="f-edited"></div>
+      <p data-need="public" class="px-4 pt-3 pb-2 text-[12px] text-ink-600">Only tables checked and flagged valid are shown. <a href="/login" class="text-brand-600 hover:underline">Log in</a> to see and fix the others.</p>
       <fieldset class="min-w-0 border-t border-ink-100 px-2 pt-3 pb-2">
         <legend class="px-2 mb-1 label !mb-1">Source type</legend>
         <div id="f-kind"></div>
@@ -51,12 +52,12 @@ import Icon from '../components/Icon.astro';
         <h2 id="summary" class="text-[12px] font-semibold uppercase tracking-wider text-ink-500" aria-live="polite"></h2>
         <div id="bulk" role="toolbar" aria-label="Selected tables" class="hidden ml-auto flex flex-wrap items-center gap-sm panel px-2 py-1 border-brand-300">
           <span id="bulkn" class="text-[12px] font-semibold text-ink-900 px-1"></span>
-          <button data-bulk="valid" class="btn-ghost btn-sm"><Icon name="flagOk" class="size-3.5 text-emerald-600" />Flag as Valid</button>
-          <button data-bulk="invalid" class="btn-ghost btn-sm"><Icon name="flagNo" class="size-3.5" />Flag as Not a Table</button>
-          <button data-bulk="none" class="btn-ghost btn-sm">Clear Flag</button>
-          <button data-bulk="delete" class="btn-ghost btn-sm"><Icon name="trash" class="size-3.5" />Delete</button>
-          <button data-bulk="restore" class="btn-ghost btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
-          <span class="w-px h-5 bg-ink-200 mx-0.5" role="separator"></span>
+          <button data-bulk="valid" data-need="editor" class="btn-ghost btn-sm"><Icon name="flagOk" class="size-3.5 text-emerald-600" />Flag as Valid</button>
+          <button data-bulk="invalid" data-need="editor" class="btn-ghost btn-sm"><Icon name="flagNo" class="size-3.5" />Flag as Not a Table</button>
+          <button data-bulk="none" data-need="editor" class="btn-ghost btn-sm">Clear Flag</button>
+          <button data-bulk="delete" data-need="editor" class="btn-ghost btn-sm"><Icon name="trash" class="size-3.5" />Delete</button>
+          <button data-bulk="restore" data-need="editor" class="btn-ghost btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
+          <span data-need="editor" class="w-px h-5 bg-ink-200 mx-0.5" role="separator"></span>
           <div class="relative" data-menu>
             <button class="btn-primary btn-sm" data-menu-toggle><Icon name="download" class="size-3.5" />Export<Icon name="chevron" class="size-3" /></button>
             <div class="menu hidden right-0 w-72">
@@ -87,6 +88,7 @@ import Icon from '../components/Icon.astro';
   import { icon } from '../lib/icons';
   import { UNCAT, catLabel, pathKey } from '../lib/categories';
   import { getSettings } from '../lib/settings';
+  import { canEdit, me } from '../lib/auth';
 
   initMenus();
   const settings = getSettings();
@@ -252,9 +254,9 @@ import Icon from '../components/Icon.astro';
       <div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3" aria-hidden="true">${icon('grid', 'size-6')}</div>
       <h2 class="font-medium text-ink-900">${onlyValid ? 'No valid tables yet' : 'No tables match the filters'}</h2>
       <p class="text-[13px] text-ink-600 mt-1 mb-4">${onlyValid
-        ? `Tables show up here after you flag them as valid.${unflagged ? ` ${plural(unflagged, 'table is', 'tables are')} waiting for a flag.` : ''}`
+        ? !canEdit() ? 'No table has been checked and flagged valid yet.' : `Tables show up here after you flag them as valid.${unflagged ? ` ${plural(unflagged, 'table is', 'tables are')} waiting for a flag.` : ''}`
         : 'Try other flags, source types or documents.'}</p>
-      ${onlyValid && unflagged ? '<button data-empty="unflagged" class="btn-primary">Review Unflagged Tables</button>' : '<button data-empty="reset" class="btn-line">Reset Filters</button>'}
+      ${onlyValid && unflagged && canEdit() ? '<button data-empty="unflagged" class="btn-primary">Review Unflagged Tables</button>' : '<button data-empty="reset" class="btn-line">Reset Filters</button>'}
     </div>`;
   }
 
@@ -295,17 +297,17 @@ import Icon from '../components/Icon.astro';
         <div class="flex-1 min-w-0">
           <h2 class="font-semibold text-ink-900 leading-snug">${esc(t.title || 'Untitled table')}</h2>
           <p class="text-[12px] text-ink-600 mt-0.5">${esc(KIND_LABEL[d.kind] ?? d.kind)} · ${esc(d.title)}</p>
-          <p class="text-[12px] text-ink-600">${pageText(t)} of ${d.page_count} · ${areaText(t)} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ' · edited' : ''}</p>
+          <p class="text-[12px] text-ink-600">${pageText(t)} of ${d.page_count} · ${areaText(t)} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ' · edited' : ''}${t.updated_by_name ? ` · last change: ${esc(t.updated_by_name)}, ${ago(t.updated_at)}` : ''}</p>
         </div>
         <button data-close class="btn-ghost btn-sm btn-icon" title="Close preview (Esc)">${icon('x')}</button>
       </div>
       <div class="flex flex-wrap items-center gap-md px-4 py-2 border-b border-ink-100">
-        <div class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
+        <div data-need="editor" class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
           ${(['none', 'valid', 'invalid'] as const).map((v) => `<label class="flag-opt"><input type="radio" name="pflag" value="${v}" ${t.status === v ? 'checked' : ''} ${t.deleted ? 'disabled' : ''} class="sr-only" />${v === 'valid' ? icon('flagOk', 'size-3.5') : v === 'invalid' ? icon('flagNo', 'size-3.5') : ''}${v === 'none' ? 'Unflagged' : v === 'valid' ? 'Valid' : 'Not a Table'}</label>`).join('')}
         </div>
         <a href="/doc?id=${d.id}&table=${t.id}" class="btn-primary btn-sm ml-auto">${icon('target', 'size-3.5')}Open in PDF</a>
-        ${s === 'deleted' ? `<button data-restore class="btn-line btn-sm">${icon('restore', 'size-3.5')}Restore</button>`
-          : `<button data-del class="btn-ghost btn-sm" title="Delete (can be undone)">${icon('trash', 'size-3.5')}Delete</button>`}
+        ${s === 'deleted' ? `<button data-restore data-need="editor" class="btn-line btn-sm">${icon('restore', 'size-3.5')}Restore</button>`
+          : `<button data-del data-need="editor" class="btn-ghost btn-sm" title="Delete (can be undone)">${icon('trash', 'size-3.5')}Delete</button>`}
       </div>
       <div class="flex-1 min-h-0 overflow-auto p-4 space-y-3">
         <section aria-label="Area on the PDF">
@@ -364,15 +366,19 @@ import Icon from '../components/Icon.astro';
         { label: 'Open in PDF', icon: 'target', action: () => (location.href = `/doc?id=${t.document!.id}&table=${id}`) },
         'sep' as const,
       ]),
-      { label: 'Flag as Valid', icon: 'flagOk', disabled: !many && t.status === 'valid', action: () => act(ids, 'valid') },
-      { label: 'Flag as Not a Table', icon: 'flagNo', disabled: !many && t.status === 'invalid', action: () => act(ids, 'invalid') },
-      { label: 'Clear Flag', icon: 'dot', disabled: !many && t.status === 'none', action: () => act(ids, 'none') },
-      'sep',
+      ...(canEdit() ? [
+        { label: 'Flag as Valid', icon: 'flagOk', disabled: !many && t.status === 'valid', action: () => act(ids, 'valid') },
+        { label: 'Flag as Not a Table', icon: 'flagNo', disabled: !many && t.status === 'invalid', action: () => act(ids, 'invalid') },
+        { label: 'Clear Flag', icon: 'dot', disabled: !many && t.status === 'none', action: () => act(ids, 'none') },
+        'sep' as const,
+      ] : []),
       { label: `Export ${many ? `${ids.length} Tables` : 'Table'} to Excel`, icon: 'download', action: () => (location.href = api.manyExportUrl(ids, 'xlsx', settings.decimal, settings.exportTitle)) },
-      'sep',
-      !many && t.deleted
-        ? { label: 'Restore', icon: 'restore', action: () => act(ids, 'restore') }
-        : { label: many ? `Delete ${ids.length} Tables` : 'Delete', icon: 'trash', danger: true, action: () => act(ids, 'delete') },
+      ...(!canEdit() ? [] : [
+        'sep' as const,
+        !many && t.deleted
+          ? { label: 'Restore', icon: 'restore', action: () => act(ids, 'restore') }
+          : { label: many ? `Delete ${ids.length} Tables` : 'Delete', icon: 'trash', danger: true, action: () => act(ids, 'delete') },
+      ]),
     ];
     contextMenu(at, items2);
   }
@@ -444,4 +450,6 @@ import Icon from '../components/Icon.astro';
 
   renderPreview();
   load();
+  me();
+  addEventListener('tdp-role', () => load()); // logged out meanwhile: visitors see only valid tables
 </script>

@@ -14,11 +14,11 @@ import Icon from '../components/Icon.astro';
       <span id="meta" class="text-[12px] text-ink-500 whitespace-nowrap hidden xl:inline"></span>
     </div>
     <div class="toolbar">
-      <div class="flex items-center border border-ink-200 h-8 bg-surface">
+      <div class="flex items-center border border-ink-200 h-8 bg-surface" data-need="editor">
         <select id="engine" aria-label="Extraction method" class="h-full px-2 text-[13px] bg-transparent border-r border-ink-200 focus:outline-none"></select>
         <input id="pages" aria-label="Pages to extract" class="h-full w-24 px-2 text-[13px] bg-transparent focus:outline-none" placeholder="All pages" title="Pages to extract, for example 1–5, 9" />
       </div>
-      <button id="run" class="btn-primary"><Icon name="play" class="size-3.5" />Get All Tables</button>
+      <button id="run" class="btn-primary" data-need="editor"><Icon name="play" class="size-3.5" />Get All Tables</button>
       <div class="relative" data-menu>
         <button class="btn-line" data-menu-toggle title="Change the arrangement of PDF, table list and editor"><Icon name="grid" />Layout<Icon name="chevron" class="size-3.5" /></button>
         <div id="layoutmenu" class="menu hidden right-0 w-80"></div>
@@ -27,7 +27,8 @@ import Icon from '../components/Icon.astro';
         <button class="btn-line" data-menu-toggle><Icon name="download" />Export<Icon name="chevron" class="size-3.5" /></button>
         <div class="menu hidden right-0 w-80">
           <div class="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Tables in this document</div>
-          <div class="px-3 pb-2 flex flex-col gap-sm text-[12.5px] text-ink-700" data-keep-open role="radiogroup" aria-label="Which tables">
+          <p data-need="public" class="px-3 pb-2 text-[12.5px] text-ink-700">The tables flagged valid</p>
+          <div data-need="editor" class="px-3 pb-2 flex flex-col gap-sm text-[12.5px] text-ink-700" data-keep-open role="radiogroup" aria-label="Which tables">
             <label class="flex items-center gap-lg"><input type="radio" name="include" value="usable" checked class="accent-brand-700" />All except deleted and “not a table”</label>
             <label class="flex items-center gap-lg"><input type="radio" name="include" value="valid" class="accent-brand-700" />Only tables flagged valid</label>
           </div>
@@ -52,7 +53,7 @@ import Icon from '../components/Icon.astro';
     <div class="flex items-center gap-lg px-4 h-8 text-[12.5px] text-ink-800">
       <Icon name="spinner" class="size-3.5 text-brand-600" />
       <span id="jobtext">Starting…</span>
-      <button id="jobcancel" class="ml-auto btn-ghost btn-sm"><Icon name="stop" class="size-3" />Cancel</button>
+      <button id="jobcancel" data-need="editor" class="ml-auto btn-ghost btn-sm"><Icon name="stop" class="size-3" />Cancel</button>
     </div>
   </div>
 
@@ -71,9 +72,9 @@ import Icon from '../components/Icon.astro';
           <input id="pgin" class="field h-6 w-12 px-1 text-center text-[12px]" value="1" />
           <span id="pgcount">of –</span></label>
         <span class="w-px h-5 bg-ink-200 mx-1" role="separator"></span>
-        <button id="draw" class="btn-line btn-sm" title="Drag a rectangle over a table to extract only that area (R)"><Icon name="crop" class="size-3.5" /><span id="drawlabel">Draw Table Area</span></button>
+        <button id="draw" data-need="editor" class="btn-line btn-sm" title="Drag a rectangle over a table to extract only that area (R)"><Icon name="crop" class="size-3.5" /><span id="drawlabel">Draw Table Area</span></button>
         <button id="seltext" class="btn-ghost btn-sm" title="Select and copy text, also inside table areas (T)"><Icon name="textCursor" class="size-3.5" /><span id="seltextlabel" class="hidden @2xl:inline">Select Text</span></button>
-        <button id="pagex" class="btn-ghost btn-sm" title="Run extraction again on the page shown"><Icon name="reset" class="size-3.5" /><span class="hidden @3xl:inline">Extract This Page</span><span class="@3xl:hidden">This Page</span></button>
+        <button id="pagex" data-need="editor" class="btn-ghost btn-sm" title="Run extraction again on the page shown"><Icon name="reset" class="size-3.5" /><span class="hidden @3xl:inline">Extract This Page</span><span class="@3xl:hidden">This Page</span></button>
         <label class="ml-auto flex items-center gap-md text-[12px] text-ink-600 pr-1 whitespace-nowrap" title="Show the table areas on the PDF">
           <input id="boxes" type="checkbox" checked class="accent-brand-700" aria-label="Show areas" /><span class="hidden @2xl:inline">Show areas</span>
         </label>
@@ -95,7 +96,7 @@ import Icon from '../components/Icon.astro';
           <button class="btn-line btn-sm" data-menu-toggle title="Which tables to list"><Icon name="filter" class="size-3.5" /><span id="flabel">Filter</span><Icon name="chevron" class="size-3" /></button>
           <div id="fmenu" class="menu hidden left-0 w-64 py-2" data-keep-open></div>
         </div>
-        <button id="addtable" class="ml-auto btn-ghost btn-sm" title="Add an empty table on the page shown" aria-label="Add Empty Table"><Icon name="plus" class="size-3.5" /><span class="hidden @sm:inline">Add Empty Table</span></button>
+        <button id="addtable" data-need="editor" class="ml-auto btn-ghost btn-sm" title="Add an empty table on the page shown" aria-label="Add Empty Table"><Icon name="plus" class="size-3.5" /><span class="hidden @sm:inline">Add Empty Table</span></button>
       </div>
       <div id="tlist" role="listbox" aria-multiselectable="true" aria-labelledby="tlist-label" tabindex="0"
         class="@container flex-1 min-h-0 overflow-y-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"></div>
@@ -103,7 +104,7 @@ import Icon from '../components/Icon.astro';
 
   <div id="paneC" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table editor">
       <div id="tbar" class="hidden shrink-0 flex flex-wrap items-center gap-md px-2 py-1.5 border-b border-ink-200 bg-surface" role="toolbar" aria-label="Table">
-        <div class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
+        <div data-need="editor" class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
           <label class="flag-opt" title="No decision yet"><input type="radio" name="flag" value="none" class="sr-only" />Unflagged</label>
           <label class="flag-opt" title="A real table, keep it (V)"><input type="radio" name="flag" value="valid" class="sr-only" /><Icon name="flagOk" class="size-3.5" />Valid</label>
           <label class="flag-opt" title="Not a table, e.g. a chart or a text box (X)"><input type="radio" name="flag" value="invalid" class="sr-only" /><Icon name="flagNo" class="size-3.5" />Not a Table</label>
@@ -111,7 +112,7 @@ import Icon from '../components/Icon.astro';
         <span id="tbadge" class="text-[11.5px] text-ink-500 px-1"></span>
         <span id="savestate" role="status" class="text-[11.5px] text-ink-500 flex items-center gap-sm"></span>
         <div class="ml-auto toolbar">
-          <div class="relative" data-menu>
+          <div class="relative" data-menu data-need="editor">
             <button class="btn-ghost btn-sm" data-menu-toggle title="Join a continuation, e.g. the same table on the next page"><Icon name="rowBelow" class="size-3.5" />Join<Icon name="chevron" class="size-3" /></button>
             <div id="joinmenu" class="menu hidden right-0 w-96"></div>
           </div>
@@ -123,33 +124,34 @@ import Icon from '../components/Icon.astro';
               <button id="tx-xlsx" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download Excel (.xlsx)</button>
               <button id="tx-csv" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download CSV (.csv)</button>
               <button id="tx-json" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download JSON (.json)</button>
-              <div class="border-t border-ink-100 my-1"></div>
-              <button id="trextract" class="menu-item"><Icon name="target" class="size-4 text-ink-500" />Extract Area Again</button>
-              <button id="treset" class="menu-item"><Icon name="reset" class="size-4 text-ink-500" />Reset to Extracted Version</button>
+              <div data-need="editor" class="border-t border-ink-100 my-1"></div>
+              <button id="trextract" data-need="editor" class="menu-item"><Icon name="target" class="size-4 text-ink-500" />Extract Area Again</button>
+              <button id="treset" data-need="editor" class="menu-item"><Icon name="reset" class="size-4 text-ink-500" />Reset to Extracted Version</button>
             </div>
           </div>
-          <button id="tdel" class="btn-ghost btn-sm" title="Mark as deleted; can be undone (Del)"><Icon name="trash" class="size-3.5" />Delete</button>
+          <button id="tdel" data-need="editor" class="btn-ghost btn-sm" title="Mark as deleted; can be undone (Del)"><Icon name="trash" class="size-3.5" />Delete</button>
         </div>
       </div>
       <div id="tdeleted" role="status" class="hidden shrink-0 flex items-center gap-lg px-3 h-9 bg-red-50 border-b border-red-200 text-[12.5px] text-red-800">
         <Icon name="trash" class="size-3.5" />Marked as deleted: hidden from exports and the Tables page.
         <button id="trestore" class="ml-auto btn-line btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
-        <button id="tpurge" class="btn-sm btn bg-red-700 border-red-700 text-white hover:bg-red-800">Delete Permanently…</button>
+        <button id="tpurge" data-need="admin" class="btn-sm btn bg-red-700 border-red-700 text-white hover:bg-red-800">Delete Permanently…</button>
       </div>
-      <div id="tjoin" class="hidden shrink-0 flex flex-wrap items-center gap-lg px-3 py-1.5 bg-brand-50 border-b border-brand-100 text-[12.5px] text-ink-800"></div>
+      <div id="tjoin" data-need="editor" class="hidden shrink-0 flex flex-wrap items-center gap-lg px-3 py-1.5 bg-brand-50 border-b border-brand-100 text-[12.5px] text-ink-800"></div>
       <div id="editor" class="flex-1 min-h-0"></div>
   </div>
   </div>
 </Layout>
 
 <script>
-  import { api, ENGINE_NAME, type BBox, type Doc, type Engine, type Job, type State, type JoinMode, type Table, type TablePatch } from '../lib/api';
+  import { api, ApiError, ENGINE_NAME, type BBox, type Doc, type Engine, type Job, type State, type JoinMode, type Table, type TablePatch } from '../lib/api';
   import { PdfViewer } from '../lib/viewer';
   import { TableEditor, type EditorChange } from '../lib/editor';
-  import { $, esc, toast, toastError, plural, fmtBytes, fmtDate, parsePages, debounce, confirmDialog, initMenus, KIND_LABEL, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
+  import { $, esc, h, ago, toast, toastError, plural, fmtBytes, fmtDate, parsePages, debounce, confirmDialog, initMenus, KIND_LABEL, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
   import { icon } from '../lib/icons';
   import { Layout, LAYOUTS } from '../lib/layout';
   import { getSettings } from '../lib/settings';
+  import { canEdit, me } from '../lib/auth';
 
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
@@ -262,20 +264,64 @@ import Icon from '../components/Icon.astro';
       : s === 'error' ? `<span class="text-red-700 font-medium">Changes not saved</span><button data-retry="${tid}" class="btn-line btn-sm !h-6">Retry</button>` : '';
   };
   $('#savestate').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-retry]'); if (b) flush(b.dataset.retry!); });
+  // one save per table at a time: each save says which version it is based on (base = updated_at), and the next
+  // one waits for the answer, so our own saves never look like someone else's change
+  const inflight = new Map<string, Promise<void>>();
   async function flush(tid: string) {
+    while (inflight.has(tid)) await inflight.get(tid);
     const p = pending.get(tid);
     if (!p) return;
     pending.delete(tid);
-    setSave('saving');
-    try {
-      const t = await api.patchTable(tid, p);
-      replaceTable(t, false);
-      setSave('saved');
-    } catch (e: any) {
-      pending.set(tid, { ...p, ...pending.get(tid) }); // keep the edits for the retry
-      setSave('error', tid);
-      toastError(new Error(`Changes were not saved: ${e.message}`), () => flush(tid));
+    const run = (async () => {
+      setSave('saving');
+      const base = tables.find((x) => x.id === tid)?.updated_at;
+      try {
+        const t = await api.patchTable(tid, { ...p, base });
+        replaceTable(t, false);
+        setSave('saved');
+      } catch (e: any) {
+        if (e instanceof ApiError && e.data?.conflict) { await resolveConflict(tid, { ...p, ...pending.get(tid) }, e.data.table, e.message); return; }
+        pending.set(tid, { ...p, ...pending.get(tid) }); // keep the edits for the retry
+        setSave('error', tid);
+        toastError(new Error(`Changes were not saved: ${e.message}`), () => flush(tid));
+      }
+    })();
+    inflight.set(tid, run);
+    try { await run; } finally { inflight.delete(tid); }
+  }
+
+  /** someone else saved this table while we were editing it: keep ours (on top of theirs) or take theirs */
+  async function resolveConflict(tid: string, mine: TablePatch, theirs: Table, message: string) {
+    pending.delete(tid);
+    setSave('');
+    const what = [mine.rows || mine.merges || mine.header_rows !== undefined ? 'the cells' : '', mine.title !== undefined ? 'the title' : '',
+      mine.notes !== undefined ? 'the notes' : '', mine.decimal_sep !== undefined ? 'the decimal setting' : ''].filter(Boolean).join(', ');
+    const choice = await new Promise<'mine' | 'theirs'>((resolve) => {
+      const dlg = h(`<dialog aria-labelledby="cf-t" class="panel p-0 shadow-2xl backdrop:bg-black/40 w-[480px] max-w-[92vw] m-auto border-ink-300">
+        <div class="px-5 pt-4 pb-2"><h3 id="cf-t" class="font-semibold text-ink-900">Changed by someone else</h3></div>
+        <p class="px-5 text-[13px] text-ink-700">${esc(message)}${theirs.updated_at ? ` (${ago(theirs.updated_at)})` : ''}</p>
+        <p class="px-5 pt-2 pb-4 text-[13px] text-ink-600">Your unsaved change: ${esc(what || 'an edit')}. Keeping yours writes only that over their version;
+          everything else keeps their changes.</p>
+        <div class="flex justify-end gap-lg px-5 py-3 bg-ink-50 border-t border-ink-200">
+          <button class="btn-line" value="theirs" autofocus>Use Their Version</button>
+          <button class="btn-primary" value="mine">Keep My Change</button>
+        </div></dialog>`) as HTMLDialogElement;
+      document.body.append(dlg);
+      dlg.addEventListener('click', (e) => { const v = (e.target as HTMLElement).closest('button')?.value; if (v) dlg.close(v); });
+      dlg.addEventListener('cancel', (e) => e.preventDefault()); // a decision is needed
+      dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'mine' ? 'mine' : 'theirs'); dlg.remove(); });
+      dlg.showModal();
+    });
+    const i = tables.findIndex((x) => x.id === tid);
+    if (choice === 'theirs') {
+      if (i >= 0) tables[i] = theirs;
+      replaceTable(theirs, true);
+      toast(`Showing the version of ${theirs.updated_by_name ?? 'the other editor'}`, 'info');
+      return;
     }
+    if (i >= 0) tables[i] = { ...tables[i]!, updated_at: theirs.updated_at }; // based on their version now
+    pending.set(tid, { ...mine, checkpoint: true });
+    setTimeout(() => flush(tid), 0); // after this save has finished (flush waits for it)
   }
   const saveSoon = debounce((tid: string) => flush(tid), 600);
   function queue(tid: string, patch: TablePatch, now = false) {
@@ -375,11 +421,12 @@ import Icon from '../components/Icon.astro';
         <span class="text-ink-300 font-mono w-4 text-center">${i === kids.length - 1 ? '└' : '├'}</span>
         <span class="w-14 shrink-0 text-[11px] font-semibold text-ink-500 tabular-nums">p${c.page}</span>
         <span class="flex-1 min-w-0 truncate">${c.part < 0 ? 'First part' : `Part ${c.k}`} · ${c.size}${c.skipped ? ` <span class="text-ink-500">(${plural(c.skipped, 'repeated header row')} dropped)</span>` : ''}</span>
-        ${c.part >= 0 ? `<button data-unjoin-part="${t.id}" data-pidx="${c.part}" class="btn-ghost btn-sm !h-6 text-ink-600" title="Separate this part (and the parts after it) again">${icon('splitCells', 'size-3')}Unjoin</button>` : ''}
+        ${c.part >= 0 && canEdit() ? `<button data-unjoin-part="${t.id}" data-pidx="${c.part}" class="btn-ghost btn-sm !h-6 text-ink-600" title="Separate this part (and the parts after it) again">${icon('splitCells', 'size-3')}Unjoin</button>` : ''}
       </div>`).join('');
     }).join('') || `<div class="px-4 py-8 text-center text-[12.5px] text-ink-600">
         <div class="mx-auto grid place-items-center size-10 bg-ink-50 border border-ink-200 text-ink-400 mb-2">${icon('table', 'size-5')}</div>
         ${tables.length ? `<p>No tables match the filter.</p><button data-empty="filter" class="btn-line btn-sm mt-3">Show All Tables</button>`
+          : !canEdit() ? '<p>No table of this document has been flagged valid yet.</p>'
           : `<p>No tables found yet.</p><button data-empty="run" class="btn-primary btn-sm mt-3">${icon('play', 'size-3.5')}Get All Tables</button>`}</div>`;
     $('#tlist').setAttribute('aria-activedescendant', focusId && $('#tlist').querySelector(`#row-${focusId}`) ? `row-${focusId}` : '');
   }
@@ -442,6 +489,14 @@ import Icon from '../components/Icon.astro';
     const ids = sel.map((t) => t.id);
     const allDeleted = sel.every((t) => t.deleted);
     const items: MenuItem[] = [{ heading: one ? `${label(one)} · ${one.title || 'Untitled table'}` : `${sel.length} tables selected · ${label(sel[0]!)} to ${label(sel.at(-1)!)}` }];
+    if (!canEdit()) { // visitors: look and export only
+      if (one) items.push({ label: 'Show in PDF', icon: 'target', action: () => { layout.focus('A'); viewer.scrollToTable(one); } },
+        { label: 'Copy for Spreadsheet', icon: 'copy', action: () => $('#tcopy').click() });
+      items.push({ label: `Export ${one ? 'Table' : `${sel.length} Tables`} to Excel`, icon: 'download', action: () => (location.href = api.manyExportUrl(ids, 'xlsx', $<HTMLSelectElement>('#decimal').value, $<HTMLInputElement>('#ex-title').checked)) },
+        { label: `Export ${one ? 'Table' : `${sel.length} Tables`} to CSV`, icon: 'file', action: () => (location.href = api.manyExportUrl(ids, 'zip')) });
+      contextMenu(at instanceof HTMLElement ? ($('#tlist').querySelector<HTMLElement>(`#row-${id}`) ?? at) : at, items);
+      return;
+    }
     if (!one) {
       const joinable = sel.every((t) => !t.deleted);
       items.push({ label: `<b>Join ${sel.length} Tables</b> into ${label(sel[0]!)}`, icon: 'rowBelow', hint: `p${sel[0]!.page}–${lastPage(sel.at(-1)!)}`, disabled: !joinable, action: () => joinMany(ids) });
@@ -505,7 +560,8 @@ import Icon from '../components/Icon.astro';
   function renderBar(t: Table) {
     document.querySelectorAll<HTMLInputElement>('input[name="flag"]').forEach((r) => { r.checked = r.value === t.status; r.disabled = t.deleted; });
     const moved = t.original_bbox && t.bbox.some((v, i) => Math.abs(v - t.original_bbox![i]!) > 0.5);
-    $('#tbadge').innerHTML = `Page ${t.page} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ` · <span class="text-accent-600 font-medium inline-flex items-center gap-sm">${icon('edit', 'size-3')}edited</span>` : ''}${moved ? ' · area moved' : ''}`;
+    $('#tbadge').innerHTML = `Page ${t.page} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ` · <span class="text-accent-600 font-medium inline-flex items-center gap-sm">${icon('edit', 'size-3')}edited</span>` : ''}${moved ? ' · area moved' : ''}`
+      + (t.updated_by_name ? ` · <span title="Last change">${esc(t.updated_by_name)}, ${ago(t.updated_at)}</span>` : '');
     $('#tdeleted').classList.toggle('hidden', !t.deleted);
     $('#tdel').classList.toggle('hidden', t.deleted);
     const noArea = !(t.bbox[2] - t.bbox[0] > 0) || !!t.parts?.length;
@@ -517,11 +573,13 @@ import Icon from '../components/Icon.astro';
   let openSeq = 0;
   async function openEditor(t: Table) {
     const seq = ++openSeq;
-    editor.open(t, [], t.deleted);
+    const ro = t.deleted || !canEdit();
+    editor.open(t, [], ro);
+    if (!canEdit()) { if (pendingReveal?.id === t.id) editor.reveal(pendingReveal.page); return; }
     try {
       const vs = await api.versions(t.id);
       if (seq === openSeq && selected === t.id && !pending.has(t.id)) {
-        editor.open(tables.find((x) => x.id === t.id) ?? t, vs, t.deleted);
+        editor.open(tables.find((x) => x.id === t.id) ?? t, vs, ro);
         if (pendingReveal?.id === t.id) editor.reveal(pendingReveal.page);
       }
     } catch { /* history is optional */ }
@@ -542,10 +600,10 @@ import Icon from '../components/Icon.astro';
       $('#editor').innerHTML = `<div class="h-full grid place-items-center text-center px-8">
         <div><div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3">${icon('table', 'size-6')}</div>
         <div class="font-medium text-ink-900 text-[14px]">No table selected</div>
-        <p class="text-[12.5px] text-ink-600 mt-1 max-w-[24rem] mx-auto">Choose a table in the list or on the PDF. Select it again on the PDF to move or resize its area.</p>
+        <p class="text-[12.5px] text-ink-600 mt-1 max-w-[24rem] mx-auto">Choose a table in the list or on the PDF.${canEdit() ? ' Select it again on the PDF to move or resize its area.' : ''}</p>
         <div class="mt-4 flex justify-center gap-lg">
-          ${tables.length ? '' : `<button data-empty="run" class="btn-primary btn-sm">${icon('play', 'size-3.5')}Get All Tables</button>`}
-          <button data-empty="draw" class="btn-line btn-sm">${icon('crop', 'size-3.5')}Draw Table Area</button></div></div></div>`;
+          ${tables.length || !canEdit() ? '' : `<button data-empty="run" class="btn-primary btn-sm">${icon('play', 'size-3.5')}Get All Tables</button>`}
+          ${canEdit() ? `<button data-empty="draw" class="btn-line btn-sm">${icon('crop', 'size-3.5')}Draw Table Area</button>` : ''}</div></div></div>`;
     } else {
       renderBar(t);
       openEditor(t);
@@ -761,7 +819,15 @@ import Icon from '../components/Icon.astro';
     try {
       job = await api.startJob(doc.id, $<HTMLSelectElement>('#engine').value, pages);
       pollJob();
-    } catch (e: any) { toastError(e, () => runJob(pages)); }
+    } catch (e: any) {
+      if (e instanceof ApiError && e.status === 409 && e.data?.job) { // someone (else) already runs one: follow it
+        job = e.data.job;
+        toast(e.message, 'info');
+        pollJob();
+        return;
+      }
+      toastError(e, () => runJob(pages));
+    }
   }
 
   let lastFound = -1;
@@ -776,6 +842,7 @@ import Icon from '../components/Icon.astro';
       $('#jobfill').style.width = `${pct}%`;
       $('#jobtext').textContent = job.status === 'queued' ? 'Queued…'
         : `Finding tables (${ENGINE_NAME[job.engine] ?? job.engine}): page ${job.done} of ${job.total} · ${plural(job.found, 'table')} found so far`;
+      if (job.created_by_name) $('#jobtext').textContent += ` · started by ${job.created_by_name}`;
       if (job.found !== lastFound) { lastFound = job.found; await loadTables(); }
       setTimeout(pollJob, 600);
       return;
@@ -848,6 +915,7 @@ import Icon from '../components/Icon.astro';
     $('#kind').textContent = KIND_LABEL[kind] ?? kind;
     $<HTMLInputElement>('#title').value = doc.title;
     $('#title').title = doc.title;
+    applyRole();
     $('#meta').innerHTML = [plural(doc.page_count, 'page'), fmtBytes(doc.size), doc.meta.date ? `released ${fmtDate(doc.meta.date)}` : ''].filter(Boolean).join(' · ')
       + (doc.meta.pdf ? ` · <a class="text-brand-600 underline" href="${esc(doc.meta.pdf)}" target="_blank" rel="noopener">Original on BPS</a>` : '');
     $('#pgcount').textContent = `of ${doc.page_count}`;
@@ -886,6 +954,17 @@ import Icon from '../components/Icon.astro';
     const last = doc.jobs?.[0];
     if (last && (last.status === 'running' || last.status === 'queued')) { job = last; pollJob(); }
   }
+
+  /** visitors who are not logged in: the document is read only */
+  function applyRole() {
+    const ed = canEdit();
+    $<HTMLInputElement>('#title').readOnly = !ed;
+    $('#title').title = ed ? 'Document title (click to rename)' : doc?.title ?? '';
+    viewer.readonly = !ed;
+    if (!ed) { setDraw(false); filt.states = ['none', 'valid', 'invalid']; }
+  }
+  me().then(() => { applyRole(); if (doc) refresh(); });
+  addEventListener('tdp-role', () => location.reload()); // logged out in another tab: show the visitor's view
 
   // ------------------------------------------------------------ events
   $('#run').addEventListener('click', () => {
@@ -977,7 +1056,7 @@ import Icon from '../components/Icon.astro';
     else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && cur?.parts?.length) {
       e.preventDefault(); e.key === 'ArrowRight' ? expanded.add(cur.id) : expanded.delete(cur.id); saveExpanded(); renderList();
     }
-    else if ((e.key === 'Delete') && cur) { e.preventDefault(); const ids = picked.size ? [...picked] : [cur.id]; bulkAct(ids, tables.find((t) => t.id === ids[0])?.deleted ? 'restore' : 'delete'); }
+    else if ((e.key === 'Delete') && cur && canEdit()) { e.preventDefault(); const ids = picked.size ? [...picked] : [cur.id]; bulkAct(ids, tables.find((t) => t.id === ids[0])?.deleted ? 'restore' : 'delete'); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); list.forEach((x) => picked.add(x.id)); renderList(); }
     else if (isMenuKey(e) && cur) { e.preventDefault(); rowMenu($('#tlist').querySelector<HTMLElement>(`#row-${cur.id}`) ?? $('#tlist'), cur.id); }
   });
@@ -992,7 +1071,8 @@ import Icon from '../components/Icon.astro';
       const items: MenuItem[] = [{ heading: `${label(p)} · ${k < 0 ? 'first part' : `part ${k + 2}`} · page ${k < 0 ? p.page : p.parts[k]!.page}` },
         { label: `Show page ${k < 0 ? p.page : p.parts[k]!.page} rows in editor`, icon: 'table', action: () => revealPart(p.id, k) },
         { label: 'Show in PDF', icon: 'target', action: () => { layout.focus('A'); viewer.scrollToTable(k < 0 ? p : { ...p, page: p.parts[k]!.page, bbox: p.parts[k]!.bbox }); } }];
-      if (k >= 0) items.push({ label: k === p.parts.length - 1 ? 'Unjoin this part' : `Unjoin this part and ${p.parts.length - 1 - k} after it`, icon: 'splitCells', danger: true, action: () => doUnjoin(p.id, p.parts[k]!.table_id) });
+      if (!canEdit()) { /* visitors cannot unjoin */ }
+      else if (k >= 0) items.push({ label: k === p.parts.length - 1 ? 'Unjoin this part' : `Unjoin this part and ${p.parts.length - 1 - k} after it`, icon: 'splitCells', danger: true, action: () => doUnjoin(p.id, p.parts[k]!.table_id) });
       else items.push({ label: 'Unjoin all parts', icon: 'splitCells', danger: true, action: () => doUnjoin(p.id, p.parts[0]!.table_id) });
       contextMenu(e, items);
       return;
@@ -1042,13 +1122,13 @@ import Icon from '../components/Icon.astro';
   addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('input,select,textarea,[contenteditable],[role=menu]')) return;
-    if (e.key === 'r' || e.key === 'R') setDraw(!viewer.drawMode);
+    if ((e.key === 'r' || e.key === 'R') && canEdit()) setDraw(!viewer.drawMode);
     else if (!e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'T')) setTextMode(!viewer.textMode);
     else if (e.key === 'Escape') { setDraw(false); setTextMode(false); }
     else if (e.key === '+' || e.key === '=') { viewer.setZoom(viewer.zoom * 1.2); zoomLabel(); }
     else if (e.key === '-') { viewer.setZoom(viewer.zoom / 1.2); zoomLabel(); }
-    else if (selected && !e.ctrlKey && !e.altKey && (e.key === 'v' || e.key === 'x')) { const s = cur()?.status; const want = e.key === 'v' ? 'valid' : 'invalid'; setFlag(s === want ? 'none' : want); }
-    else if (selected && e.key === 'Delete' && !t.closest('#tlist')) { const c = cur(); if (c && !c.deleted) deleteTable(c); }
+    else if (selected && canEdit() && !e.ctrlKey && !e.altKey && (e.key === 'v' || e.key === 'x')) { const s = cur()?.status; const want = e.key === 'v' ? 'valid' : 'invalid'; setFlag(s === want ? 'none' : want); }
+    else if (selected && canEdit() && e.key === 'Delete' && !t.closest('#tlist')) { const c = cur(); if (c && !c.deleted) deleteTable(c); }
     else if (e.key === 'j' || e.key === 'k') {
       const list = tables.filter(shown);
       const i = list.findIndex((x) => x.id === selected);
