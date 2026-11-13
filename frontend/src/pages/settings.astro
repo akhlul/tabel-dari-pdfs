@@ -10,9 +10,23 @@ import Icon from '../components/Icon.astro';
     </div>
 
     <form id="form" class="flex flex-col gap-grid" onsubmit="return false">
+      <fieldset class="panel p-0">
+        <legend class="sr-only">Appearance</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="settings" class="size-4 text-ink-500" />Appearance</h2>
+        <div class="px-5 pb-4">
+          <label for="theme" class="label">Color scheme</label>
+          <select id="theme" class="field w-56">
+            <option value="system">Same as the system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+          <p class="text-[12px] text-ink-500 mt-1">“Same as the system” follows the light or dark setting of this computer.</p>
+        </div>
+      </fieldset>
+
       <fieldset class="panel p-0" data-need="editor">
-        <legend class="sr-only">Search BPS</legend>
-        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="search" class="size-4 text-ink-500" />Search BPS</h2>
+        <legend class="sr-only">BPS Catalog</legend>
+        <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="search" class="size-4 text-ink-500" />BPS Catalog</h2>
         <div class="px-5 pb-4 grid gap-4">
           <div>
             <label for="region" class="label">Default region</label>
@@ -47,10 +61,6 @@ import Icon from '../components/Icon.astro';
         <legend class="sr-only">Library</legend>
         <h2 class="px-5 pt-4 pb-1 font-semibold text-ink-900 flex items-center gap-lg"><Icon name="library" class="size-4 text-ink-500" />Library</h2>
         <div class="px-5 pb-4 grid gap-4">
-          <div>
-            <label for="libraryView" class="label">Show documents as</label>
-            <select id="libraryView" class="field w-48"><option value="grid">Cards</option><option value="list">List</option></select>
-          </div>
           <label class="flex items-center gap-lg text-[13px] text-ink-800" data-need="editor">
             <input id="findTablesOnUpload" type="checkbox" class="accent-brand-700" />Find tables right after uploading a PDF
           </label>
@@ -120,7 +130,7 @@ import Icon from '../components/Icon.astro';
   import { $, esc, ago, toast, fmtBytes, plural, confirmDialog } from '../lib/ui';
   import { icon } from '../lib/icons';
   import { me } from '../lib/auth';
-  import { DEFAULTS, getSettings, saveSettings, resetLocal, locate, type Settings, type Located } from '../lib/settings';
+  import { DEFAULTS, getSettings, saveSettings, resetLocal, locate, applyTheme, type Settings, type Located } from '../lib/settings';
 
   let domains: Domain[] = [];
   const keys = Object.keys(DEFAULTS) as (keyof Settings)[];
@@ -142,8 +152,8 @@ import Icon from '../components/Icon.astro';
 
   function showLocated(l: Located | null) {
     const p = $('#located');
-    if (getSettings().region !== 'auto') { p.textContent = 'Search BPS opens with this region (unless a last search is remembered).'; return; }
-    if (!l) { p.textContent = 'Not detected yet. It is detected the first time Search BPS opens, or press Detect Now.'; return; }
+    if (getSettings().region !== 'auto') { p.textContent = 'The BPS catalog opens with this region (unless a last search is remembered).'; return; }
+    if (!l) { p.textContent = 'Not detected yet. It is detected the first time the BPS catalog opens, or press Detect Now.'; return; }
     p.innerHTML = l.domain
       ? `${icon('pin', 'size-3.5 inline -mt-0.5 text-brand-600')} Detected <b>${esc(name(l.domain))}</b> from ${l.source === 'location' ? 'your location' : 'your internet address'} (${esc(l.region)}), ${ago(l.at / 1000)}.`
       : `Detected ${esc(l.region || l.country)}: outside Indonesia, so Pusat (0000) is used.`;
@@ -164,7 +174,7 @@ import Icon from '../components/Icon.astro';
     if (!keys.includes(t.id as keyof Settings)) return;
     const v = t.type === 'checkbox' ? t.checked : t.value;
     saveSettings({ [t.id]: v } as Partial<Settings>);
-    if (t.id === 'libraryView') localStorage.setItem('lib-view', String(v));
+    if (t.id === 'theme') applyTheme(v as Settings['theme']);
     if (t.id === 'rememberSearch' && !v) localStorage.removeItem('tdp-search');
     if (t.id === 'useBrowserLocation') localStorage.removeItem('tdp-located'); // detect again with the new source
     showLocated(JSON.parse(localStorage.getItem('tdp-located') || 'null'));
@@ -187,8 +197,9 @@ import Icon from '../components/Icon.astro';
   $('#reset').addEventListener('click', () => {
     const before = Object.fromEntries(Object.keys(localStorage).filter((k) => k.startsWith('tdp-') || k.startsWith('lib-')).map((k) => [k, localStorage.getItem(k)!]));
     resetLocal();
+    applyTheme();
     fill();
-    toast('Settings reset to the defaults', 'info', { action: { label: 'Undo', run: () => { for (const [k, v] of Object.entries(before)) localStorage.setItem(k, v); fill(); } } });
+    toast('Settings reset to the defaults', 'info', { action: { label: 'Undo', run: () => { for (const [k, v] of Object.entries(before)) localStorage.setItem(k, v); applyTheme(); fill(); } } });
   });
 
   // ------------------------------------------------------------ backup / restore (server data)

@@ -74,7 +74,7 @@ def _fresh(con, table_id: str) -> dict:
     return t
 
 
-AUDIT = ("created_by", "updated_by")
+AUDIT = ("created_by", "updated_by", "validated_by")
 
 
 def _audit(items: list[dict], request: Request) -> list[dict]:
@@ -83,6 +83,7 @@ def _audit(items: list[dict], request: Request) -> list[dict]:
         for it in items:
             for k in AUDIT:
                 it.pop(k, None)
+            it.pop("validated_at", None)
         return items
     names = auth.user_names()
     for it in items:
@@ -141,7 +142,7 @@ def create_table(doc_id: str, body: TableCreate):
 def _all_light(con, public: bool = False) -> list[dict]:
     rs = con.execute(
         """SELECT t.id, t.document_id, t.page, t.idx, t.title, t.notes, t.status, t.deleted, t.edited,
-                  t.updated_at, d.title AS doc_title, d.source AS doc_source, d.meta AS doc_meta,
+                  t.updated_at, t.validated_by, t.validated_at, d.title AS doc_title, d.source AS doc_source, d.meta AS doc_meta,
                   d.category AS doc_category
            FROM tables t JOIN documents d ON d.id = t.document_id
            WHERE t.joined_into IS NULL AND d.deleted_at IS NULL""" + (f" AND {PUBLIC_TABLE_SQL}" if public else "")
@@ -170,7 +171,8 @@ def search_tables(
     docs: str = "",
     kinds: str = "",
     q: str = "",
-    sort: Literal["recent", "document"] = "document",
+    validator: str = Query("", description="csv of user ids; 'none' = no validator recorded"),
+    sort: Literal["recent", "document", "validated"] = "document",
     offset: int = Query(0, ge=0),
     limit: int = Query(30, ge=1, le=200),
 ):
@@ -178,6 +180,7 @@ def search_tables(
     if public:  # visitors who are not logged in: only tables flagged valid
         state = "valid"
     want_state, want_docs, want_kinds = set(_csv(state)), set(_csv(docs)), set(_csv(kinds))
+    want_val = set() if public else set(_csv(validator))
     ql = q.strip().lower()
     with db.db() as con:
         light = _all_light(con, public)
@@ -191,6 +194,8 @@ def search_tables(
             return False
         if skip != "kinds" and want_kinds and t["kind"] not in want_kinds:
             return False
+        if skip != "validator" and want_val and (t["validated_by"] or "none") not in want_val:
+            return False
         if ql and ql not in f"{t['title']} {t['notes']} {t['doc_title']}".lower():
             return False
         return True
@@ -201,7 +206,18 @@ def search_tables(
         "edited": sum(1 for t in light if ok(t, "edited") and t["edited"]),
         "kinds": {},
         "docs": {},
+        "validators": [],
     }
+    if not public:  # who flagged the tables (names only for staff)
+        names = auth.user_names()
+        by: dict[str, int] = {}
+        for t in light:
+            if ok(t, "validator") and t["status"] != "none":
+                k = t["validated_by"] or "none"
+                by[k] = by.get(k, 0) + 1
+        facets["validators"] = sorted(
+            ({"id": k, "name": names.get(k, "Unknown") if k != "none" else "Not recorded", "count": n}
+             for k, n in by.items()), key=lambda v: (v["id"] == "none", -v["count"]))
     for t in light:
         if ok(t, "kinds"):
             facets["kinds"][t["kind"]] = facets["kinds"].get(t["kind"], 0) + 1
@@ -220,6 +236,8 @@ def search_tables(
     hits = [t for t in light if ok(t)]
     if sort == "recent":
         hits.sort(key=lambda t: -t["updated_at"])
+    elif sort == "validated":  # most recently flagged first, unflagged last
+        hits.sort(key=lambda t: -(t["validated_at"] or 0))
     else:
         hits.sort(key=lambda t: (t["doc_title"].lower(), t["document_id"], t["page"], t["idx"]))
     page_ids = [t["id"] for t in hits[offset: offset + limit]]
@@ -278,9 +296,14 @@ def bulk(body: Bulk, request: Request):
     marks = ",".join("?" * len(body.ids))
     now, me = time.time(), _me()
     with db.db() as con, db.tx(con):
-        if body.action in ("valid", "invalid", "none"):
-            n = con.execute(f"UPDATE tables SET status=?, updated_at=?, updated_by=? WHERE id IN ({marks})",
-                            (body.action, now, me, *body.ids)).rowcount
+        if body.action in ("valid", "invalid"):  # the validator changes only where the flag changes
+            n = con.execute(f"UPDATE tables SET validated_by=CASE WHEN status=? THEN validated_by ELSE ? END, "
+                            f"validated_at=CASE WHEN status=? THEN validated_at ELSE ? END, "
+                            f"status=?, updated_at=?, updated_by=? WHERE id IN ({marks})",
+                            (body.action, me, body.action, now, body.action, now, me, *body.ids)).rowcount
+        elif body.action == "none":
+            n = con.execute(f"UPDATE tables SET status='none', validated_by=NULL, validated_at=NULL, updated_at=?, "
+                            f"updated_by=? WHERE id IN ({marks})", (now, me, *body.ids)).rowcount
         elif body.action == "delete":
             n = con.execute(f"UPDATE tables SET deleted=1, deleted_at=?, updated_at=?, updated_by=? WHERE id IN ({marks})",
                             (now, now, me, *body.ids)).rowcount
@@ -394,6 +417,10 @@ def _patch(con, t: dict, body: TablePatch) -> bool:
         sets["notes"] = body.notes.strip()
     if body.status is not None:
         sets["status"] = body.status
+        if body.status != t["status"]:  # who decided, and when
+            flagged = body.status != "none"
+            sets["validated_by"] = _me() if flagged else None
+            sets["validated_at"] = time.time() if flagged else None
     if body.decimal_sep is not None:
         sets["decimal_sep"] = body.decimal_sep
     if body.deleted is not None:

@@ -381,9 +381,9 @@ def user_names() -> dict[str, str]:
 
 
 def with_names(item: dict, names: dict[str, str] | None = None) -> dict:
-    """Add created_by_name / updated_by_name next to the audit ids of a row."""
+    """Add created_by_name / updated_by_name / validated_by_name next to the audit ids of a row."""
     names = user_names() if names is None else names
-    for k in ("created_by", "updated_by"):
+    for k in ("created_by", "updated_by", "validated_by"):
         if k in item:
             item[f"{k}_name"] = names.get(item[k]) if item[k] else None
     return item

@@ -2,94 +2,152 @@
 import Layout from '../layouts/Layout.astro';
 import Icon from '../components/Icon.astro';
 ---
-<Layout title="Library" active="library" wide>
-  <div class="flex flex-wrap items-end justify-between gap-grid mb-4">
-    <div>
-      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Library</h1>
-      <p class="text-[13px] text-ink-600 mt-0.5">PDFs you uploaded or imported from BPS, sorted into categories, with the tables found in them.</p>
+<Layout title="Library" active="library" full>
+  <!-- page header -->
+  <div class="h-13 shrink-0 flex items-center gap-grid px-4 bg-surface border-b border-ink-200">
+    <h1 class="text-[17px] font-semibold text-ink-900 tracking-tight">Library</h1>
+    <span id="totals" class="text-[12px] text-ink-500" aria-live="polite"></span>
+    <span class="flex-1"></span>
+    <div class="relative">
+      <span class="absolute left-2.5 top-2 text-ink-400" aria-hidden="true"><Icon name="search" class="size-4" /></span>
+      <input id="filter" type="search" aria-label="Search documents, tags and who added them" class="field w-80 pl-8" placeholder="Search documents, tags, uploader…" />
     </div>
-    <div class="toolbar">
-      <div class="relative">
-        <span class="absolute left-2.5 top-2 text-ink-400" aria-hidden="true"><Icon name="search" class="size-4" /></span>
-        <input id="filter" type="search" aria-label="Filter documents by title" class="field w-64 pl-8" placeholder="Filter by title" />
-      </div>
-      <a href="/search" class="btn-line" data-need="editor"><Icon name="search" />Search BPS</a>
-      <button id="pick" class="btn-primary" data-need="editor"><Icon name="upload" />Upload PDF…</button>
-      <input id="file" type="file" accept="application/pdf,.pdf" multiple class="hidden" aria-hidden="true" tabindex="-1" />
-    </div>
+    <button id="pick" class="btn-primary" data-need="editor"><Icon name="upload" />Upload PDF…</button>
   </div>
 
-  <div id="drop" data-need="editor" class="panel border-dashed border-ink-300 flex flex-wrap items-center gap-grid px-4 py-2.5 mb-5 transition-colors">
-    <span class="grid place-items-center size-8 bg-brand-50 text-brand-700 border border-brand-100" aria-hidden="true"><Icon name="upload" class="size-4" /></span>
-    <div class="flex-1 min-w-60">
-      <div class="text-[13px] font-medium text-ink-900">Drop PDF files here to upload them</div>
-      <div class="text-[12px] text-ink-600">Uploads go to <b>Uncategorized</b>, or to the selected category. BPS imports are sorted by their BPS subject.</div>
-    </div>
-    <label class="flex items-center gap-lg text-[12.5px] text-ink-700">
-      <input id="auto" type="checkbox" checked class="accent-brand-700" />Find tables right after uploading
-    </label>
-  </div>
-
-  <div class="flex gap-grid items-start">
-    <aside class="w-72 shrink-0 panel sticky top-4 max-h-[calc(100dvh-5rem)] flex flex-col" aria-label="Categories">
-      <div class="flex items-center px-4 pt-3 pb-1.5 border-b border-ink-100">
+  <div class="flex-1 min-h-0 flex">
+    <!-- categories + filters -->
+    <aside class="w-64 shrink-0 bg-surface border-r-2 border-ink-200 overflow-y-auto" aria-label="Categories and filters">
+      <div class="flex items-center px-3 pt-2.5 pb-1">
         <span class="label !mb-0 flex-1">Categories</span>
-        <button id="t-collapse" class="btn-ghost btn-sm !h-6 !px-1.5 text-[11px]" title="Collapse all">Collapse</button>
+        <button id="t-collapse" class="btn-ghost btn-sm !h-6 !px-1.5 text-[11px]">Collapse All</button>
       </div>
-      <div id="tree" role="tree" aria-label="Categories" class="flex-1 min-h-0 overflow-y-auto py-1 text-[13px]">
+      <div id="tree" role="tree" aria-label="Categories" class="pb-1 text-[13px]">
         {Array.from({ length: 6 }).map(() => <div class="px-4 py-1.5"><div class="skeleton h-4 w-3/4"></div></div>)}
       </div>
-      <p data-need="editor" class="px-4 py-2 border-t border-ink-100 text-[11px] text-ink-500">Drag documents onto a category to move them. Right-click a category to rename it.</p>
+      <div id="facets" class="text-[12.5px]"></div>
+      <p data-need="editor" class="px-3 py-2 border-t border-ink-100 text-[11px] text-ink-500">Drag documents onto a category to move them. Right-click a category to rename it.</p>
     </aside>
 
-    <section class="flex-1 min-w-0" aria-label="Documents">
-      <div class="flex flex-wrap items-center gap-lg mb-3 min-h-8">
+    <!-- documents -->
+    <section id="main-list" class="flex-1 min-w-0 overflow-y-auto bg-surface" aria-label="Documents">
+      <div class="sticky top-0 z-10 bg-surface/95 backdrop-blur-sm border-b border-ink-100 flex flex-wrap items-center gap-lg px-4 min-h-10 py-1">
         <nav id="crumbs" aria-label="Current category" class="flex flex-wrap items-center gap-sm text-[13px] text-ink-600"></nav>
         <span id="count" class="text-[12px] text-ink-500" aria-live="polite"></span>
+        <span id="active-filters" class="flex flex-wrap items-center gap-sm"></span>
         <span class="flex-1"></span>
-        <label class="flex items-center gap-md text-[12.5px] text-ink-700" title="Year in the title (for example “… 2025”), else the BPS release year">
-          <Icon name="filter" class="size-3.5 text-ink-500" />Year
-          <select id="year" class="field h-8 text-[12.5px] min-w-32"><option value="">All years</option></select>
-        </label>
         <span id="selbar" data-need="editor" class="hidden items-center gap-md text-[12.5px] text-ink-700">
           <span id="selcount" class="font-medium"></span>
           <button id="sel-move" class="btn-line btn-sm"><Icon name="folder" class="size-3.5" />Move to Category…</button>
           <button id="sel-clear" class="btn-ghost btn-sm">Clear</button>
         </span>
-        <div class="flex border border-ink-200 bg-surface" role="group" aria-label="View">
-          <button data-view="grid" class="btn-ghost btn-sm btn-icon !border-0" title="Cards" aria-pressed="false"><Icon name="grid" class="size-4" /></button>
-          <button data-view="list" class="btn-ghost btn-sm btn-icon !border-0" title="List" aria-pressed="false"><Icon name="list" class="size-4" /></button>
-        </div>
       </div>
-      <div id="list">
-        <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
-          {Array.from({ length: 6 }).map(() => (
-            <div class="panel p-4 flex gap-grid"><div class="skeleton w-20 h-28"></div>
-              <div class="flex-1 space-y-2"><div class="skeleton h-4 w-3/4"></div><div class="skeleton h-3 w-1/2"></div></div></div>
-          ))}
-        </div>
+      <div id="list" class="px-4 pb-6">
+        {Array.from({ length: 6 }).map(() => (
+          <div class="flex gap-3 py-2.5 border-b border-ink-100"><div class="skeleton w-[46px] h-[62px]"></div>
+            <div class="flex-1 space-y-2 pt-1"><div class="skeleton h-4 w-2/3"></div><div class="skeleton h-3 w-1/3"></div></div></div>
+        ))}
       </div>
-      <div id="empty" class="hidden panel px-6 py-16 text-center">
+      <div id="empty" class="hidden px-6 py-16 text-center">
         <div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3" aria-hidden="true"><Icon name="file" class="size-6" /></div>
         <h2 class="font-medium text-ink-900">No documents yet</h2>
-        <p data-need="editor" class="text-[13px] text-ink-600 mt-1 mb-4">Upload a PDF, or import a publication or press release from BPS.</p>
+        <p data-need="editor" class="text-[13px] text-ink-600 mt-1 mb-4">Upload a PDF, or import a publication or press release from the BPS catalog.</p>
         <p data-need="public" class="text-[13px] text-ink-600 mt-1">No tables have been checked and marked valid yet. <a href="/login" class="text-brand-600 hover:underline">Log in</a> to work on the library.</p>
         <div data-need="editor" class="flex justify-center gap-lg">
           <button id="pick2" class="btn-primary"><Icon name="upload" />Upload PDF…</button>
-          <a href="/search" class="btn-line"><Icon name="search" />Search BPS</a>
+          <a href="/import-from-bps" class="btn-line">Open BPS Catalog</a>
         </div>
       </div>
     </section>
   </div>
+
+  <!-- dragging PDF files over the page -->
+  <div id="dropall" class="hidden fixed inset-0 z-[55] bg-surface/85 border-4 border-dashed border-brand-500 place-items-center pointer-events-none" aria-hidden="true">
+    <div class="text-center"><div class="text-[22px] font-semibold text-ink-900">Drop to upload</div><div class="text-[13px] text-ink-600">PDF files only</div></div>
+  </div>
+
+  <!-- upload: a modal; drop files, then set at least the publication year of each -->
+  <dialog id="updlg" aria-labelledby="up-t" class="panel p-0 shadow-2xl backdrop:bg-black/40 w-[920px] max-w-[96vw] m-auto mt-[8vh] border-ink-400">
+    <div class="flex items-center gap-lg px-4 h-12 border-b border-ink-200">
+      <h2 id="up-t" class="font-semibold text-ink-900 text-[15px]">Upload PDFs</h2>
+      <span id="up-sub" class="text-[12px] text-ink-500"></span>
+      <span class="flex-1"></span>
+      <button data-close class="btn-ghost btn-sm btn-icon" title="Close (Esc)"><Icon name="x" /></button>
+    </div>
+    <div class="px-4 py-3 max-h-[64vh] overflow-y-auto">
+      <button id="up-drop" type="button" class="w-full flex flex-col items-center justify-center gap-sm h-36 border-2 border-dashed border-ink-300 bg-ink-50 hover:border-brand-500 hover:bg-brand-50 text-[13px] text-ink-600 transition-colors">
+        <span class="text-[14px] font-semibold text-ink-900">Drop PDF files here</span>
+        <span>or <span class="underline">choose files</span> · up to 250 MB each</span>
+      </button>
+      <input id="file" type="file" accept="application/pdf,.pdf" multiple class="hidden" aria-hidden="true" tabindex="-1" />
+      <div id="up-files" class="hidden mt-3">
+        <div class="flex flex-wrap items-center gap-lg px-2 py-2 mb-2 bg-ink-50 border border-ink-200 text-[12.5px]">
+          <b class="text-ink-900">Apply to all:</b>
+          <label class="flex items-center gap-md">Year<select id="all-year" class="field h-7 w-24 text-[12.5px]"></select></label>
+          <label class="flex items-center gap-md">Category<input id="all-cat" list="catlist" class="field h-7 w-56 text-[12.5px]" placeholder="Uncategorized" /></label>
+          <label class="flex items-center gap-md flex-1 min-w-48">Tags<input id="all-tags" list="taglist" class="field h-7 flex-1 text-[12.5px]" placeholder="comma separated" /></label>
+          <button id="all-apply" type="button" class="btn-line btn-sm">Apply</button>
+        </div>
+        <table class="w-full text-[12.5px] border-collapse">
+          <thead><tr class="text-left text-[11px] font-semibold text-ink-600 bg-ink-100 border-b border-ink-300">
+            <th class="px-2 py-1.5">File</th><th class="px-2 py-1.5 w-28">Year <span aria-hidden="true">*</span><span class="sr-only">(required)</span></th>
+            <th class="px-2 py-1.5 w-52">Category</th><th class="px-2 py-1.5 w-72">Tags</th><th class="w-8"><span class="sr-only">Remove</span></th></tr></thead>
+          <tbody id="up-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="flex items-center gap-lg px-4 py-2.5 bg-ink-50 border-t border-ink-200">
+      <label class="flex items-center gap-lg text-[12.5px] text-ink-700"><input id="auto" type="checkbox" checked class="accent-brand-700" />Find tables after upload</label>
+      <span class="flex-1"></span>
+      <span id="up-need" role="status" class="text-[12px] text-ink-700"></span>
+      <button data-close class="btn-line">Cancel</button>
+      <button id="up-go" class="btn-primary" disabled><Icon name="upload" /><span id="up-go-l">Upload</span></button>
+    </div>
+  </dialog>
+  <datalist id="catlist"></datalist>
+  <datalist id="taglist"></datalist>
+
+  <!-- edit details and tags of one document -->
+  <dialog id="eddlg" aria-labelledby="ed-t" class="panel p-0 shadow-2xl backdrop:bg-black/40 w-[620px] max-w-[94vw] m-auto mt-[10vh] border-ink-400">
+    <form id="edform" method="dialog">
+      <div class="flex items-center gap-lg px-4 h-12 border-b border-ink-200">
+        <h2 id="ed-t" class="font-semibold text-ink-900 text-[15px]">Edit Details and Tags</h2>
+        <span class="flex-1"></span>
+        <button type="button" data-close class="btn-ghost btn-sm btn-icon" title="Close (Esc)"><Icon name="x" /></button>
+      </div>
+      <div class="px-5 py-4">
+        <div id="ed-head" class="flex items-center gap-3 pb-3.5 mb-3.5 border-b border-ink-100"></div>
+        <div class="grid grid-cols-[140px_1fr] items-center gap-x-3.5 gap-y-3 text-[12.5px]">
+          <label for="ed-title" class="text-right font-semibold text-ink-700">Title</label>
+          <input id="ed-title" required maxlength="500" class="field w-full" />
+          <label for="ed-year" class="text-right font-semibold text-ink-700">Publication year <span aria-hidden="true">*</span></label>
+          <span class="flex items-center gap-lg"><select id="ed-year" required class="field w-28"></select>
+            <span class="text-[11.5px] text-ink-500">the year on the publication, not the upload date</span></span>
+          <label for="ed-cat" class="text-right font-semibold text-ink-700">Category</label>
+          <input id="ed-cat" list="catlist" class="field w-72" placeholder="Uncategorized" title="Separate levels with “/”: Category / Sub-category" />
+          <span id="ed-tags-l" class="text-right font-semibold text-ink-700">Tags</span>
+          <div id="ed-tags"></div>
+          <span></span><span id="ed-sugg" class="text-[11.5px] text-ink-500 -mt-1.5"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-lg px-4 py-2.5 bg-ink-50 border-t border-ink-200">
+        <span class="text-[12px] text-ink-500">Changes apply to this document and its tables.</span>
+        <span class="flex-1"></span>
+        <button type="button" data-close class="btn-line">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
 </Layout>
 
 <script>
   import { api, type Doc } from '../lib/api';
-  import { $, $$, esc, fmtBytes, ago, toast, toastError, plural, KIND_LABEL, debounce, contextMenu, isMenuKey } from '../lib/ui';
+  import { $, $$, esc, fmtBytes, fmtDate, toast, toastError, plural, KIND_LABEL, debounce, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
   import { icon } from '../lib/icons';
-  import { getSettings } from '../lib/settings';
-  import { canEdit, me } from '../lib/auth';
-  import { UNCAT, SEP, buildTree, allPaths, catLabel, categoryDialog, isUnder, pathKey, type CatNode } from '../lib/categories';
+  import { getSettings, saveSettings } from '../lib/settings';
+  import { canEdit, can, me } from '../lib/auth';
+  import { UNCAT, SEP, buildTree, allPaths, catLabel, categoryDialog, isUnder, parsePath, pathKey, type CatNode } from '../lib/categories';
+  import { tagInput, clean as cleanTags, type TagInput } from '../lib/tags';
 
   const list = $('#list'), empty = $('#empty'), count = $('#count'), tree = $('#tree');
   let docs: Doc[] = [];
@@ -99,33 +157,36 @@ import Icon from '../components/Icon.astro';
   let sel: Sel = null;
   const picked = new Set<string>();
   const settings = getSettings();
-  let view: 'grid' | 'list' = (localStorage.getItem('lib-view') as 'grid' | 'list') || settings.libraryView;
-  ($('#auto') as HTMLInputElement).checked = settings.findTablesOnUpload;
-  /** year filter: '' = all, 'none' = documents without a year; separate from the category tree */
-  let year = '';
+  $<HTMLInputElement>('#auto').checked = settings.findTablesOnUpload;
+  /** facet filters (multi-select); year 'none' = no year yet */
+  const ff = { year: new Set<string>(), src: new Set<string>(), by: new Set<string>(), tag: new Set<string>() };
   const open = new Set<string>(JSON.parse(localStorage.getItem('lib-open') || 'null') ?? []);
   let openInit = !localStorage.getItem('lib-open'); // first visit: top level open
 
   const kindOf = (d: Doc) => (d.source === 'bps' ? (d.meta.kind as string) : 'upload');
   const cat = (d: Doc) => d.category ?? [];
-
-  /** the year a document is about: the last year in its title ("… 2025", "2019–2024" -> 2024), else the BPS release year */
-  function docYear(d: Doc): string | null {
-    const ys = [...d.title.matchAll(/(?<!\d)(19[5-9]\d|20\d\d)(?!\d)/g)].map((m) => m[1]!);
-    if (ys.length) return ys.at(-1)!;
-    const rel = typeof d.meta?.date === 'string' ? d.meta.date.slice(0, 4) : '';
-    return /^\d{4}$/.test(rel) ? rel : null;
-  }
-  /** every category, whatever the year filter (for pickers) */
+  const yearKey = (d: Doc) => (d.year ? String(d.year) : 'none');
   const fullTree = () => buildTree(docs.map((d) => ({ category: cat(d) })));
-  const yearOk = (d: Doc) => !year || (year === 'none' ? !docYear(d) : docYear(d) === year);
   const inSel = (d: Doc) => sel === null || (sel === 'uncat' ? !cat(d).length : isUnder(cat(d), sel));
   const saveOpen = () => localStorage.setItem('lib-open', JSON.stringify([...open]));
+  /** year and tags: an editor changes them on uploads, an admin on every document */
+  const canTag = (d: Doc) => can('admin') || (canEdit() && d.source === 'upload');
+  const allTags = () => [...new Set(docs.flatMap((d) => d.tags ?? []))].sort((a, b) => a.localeCompare(b, 'id'));
 
-  // ------------------------------------------------------------ URL state (?cat=["A","B"] or ?cat=uncat)
+  /** passes the facet filters (skip: the facet being counted, so it shows what each option adds) */
+  function facetOk(d: Doc, skip = '') {
+    if (skip !== 'year' && ff.year.size && !ff.year.has(yearKey(d))) return false;
+    if (skip !== 'src' && ff.src.size && !ff.src.has(d.source)) return false;
+    if (skip !== 'by' && ff.by.size && !ff.by.has(d.created_by_name ?? '')) return false;
+    if (skip !== 'tag' && ff.tag.size && !(d.tags ?? []).some((t) => ff.tag.has(t))) return false;
+    return true;
+  }
+
+  // ------------------------------------------------------------ URL state (?cat=["A","B"] | uncat, &year=2024,none &src= &by= &tag=)
   function readUrl() {
-    year = new URLSearchParams(location.search).get('year') ?? '';
-    const c = new URLSearchParams(location.search).get('cat');
+    const u = new URLSearchParams(location.search);
+    for (const k of ['year', 'src', 'by', 'tag'] as const) ff[k] = new Set((u.get(k) ?? '').split(',').filter(Boolean));
+    const c = u.get('cat');
     if (!c) sel = null;
     else if (c === 'uncat') sel = 'uncat';
     else { try { const p = JSON.parse(c); sel = Array.isArray(p) ? p.map(String) : null; } catch { sel = null; } }
@@ -134,7 +195,7 @@ import Icon from '../components/Icon.astro';
     const u = new URL(location.href);
     if (sel === null) u.searchParams.delete('cat');
     else u.searchParams.set('cat', sel === 'uncat' ? 'uncat' : JSON.stringify(sel));
-    if (year) u.searchParams.set('year', year); else u.searchParams.delete('year');
+    for (const k of ['year', 'src', 'by', 'tag'] as const) ff[k].size ? u.searchParams.set(k, [...ff[k]].join(',')) : u.searchParams.delete(k);
     history.replaceState(null, '', u);
   }
   const sameSel = (a: Sel, b: Sel) => JSON.stringify(a) === JSON.stringify(b);
@@ -147,13 +208,13 @@ import Icon from '../components/Icon.astro';
     const on = Array.isArray(sel) && sameSel(sel, n.path);
     let html = `<div role="treeitem" aria-level="${depth + 1}" aria-selected="${on}" ${kids ? `aria-expanded="${isOpen}"` : ''}
         data-node="${esc(key)}" tabindex="${on ? 0 : -1}" title="${esc(catLabel(n.path))}"
-        class="group/n flex items-center gap-sm h-7 pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
-        ${on ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-ink-50'}" style="padding-left:${6 + depth * 14}px">
+        class="flex items-center gap-sm h-[26px] pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
+        ${on ? 'bg-brand-50 text-ink-900 font-semibold shadow-[inset_3px_0_0_var(--color-brand-600)]' : 'text-ink-800 hover:bg-ink-50'}" style="padding-left:${6 + depth * 14}px">
       <button data-toggle="${esc(key)}" tabindex="-1" aria-hidden="true" class="grid place-items-center size-5 shrink-0 text-ink-400 hover:text-ink-800 ${kids ? '' : 'invisible'}">
         <span class="${isOpen ? '' : '-rotate-90'} transition-transform">${icon('chevron', 'size-3.5')}</span></button>
       ${icon(isOpen && kids ? 'folderOpen' : 'folder', `size-4 ${on ? 'text-brand-600' : 'text-ink-400'}`)}
       <span class="flex-1 min-w-0 truncate">${esc(n.name)}</span>
-      <span class="text-[11px] tabular-nums text-ink-500">${n.count}</span></div>`;
+      <span class="count-badge">${n.count}</span></div>`;
     if (kids && isOpen) html += `<div role="group">${n.children.map((c) => nodeRow(c, depth + 1)).join('')}</div>`;
     return html;
   }
@@ -163,15 +224,15 @@ import Icon from '../components/Icon.astro';
     const special = (id: 'all' | 'uncat', label: string, ic: string, n: number) => {
       const on = id === 'all' ? sel === null : sel === 'uncat';
       return `<div role="treeitem" aria-level="1" aria-selected="${on}" data-node="${id}" tabindex="${on ? 0 : -1}"
-        class="flex items-center gap-sm h-8 pl-3 pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
-        ${on ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-ink-50'}">
+        class="flex items-center gap-sm h-7 pl-3 pr-3 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset
+        ${on ? 'bg-brand-50 text-ink-900 font-semibold shadow-[inset_3px_0_0_var(--color-brand-600)]' : 'text-ink-800 hover:bg-ink-50'}">
         ${icon(ic, `size-4 ${on ? 'text-brand-600' : 'text-ink-500'}`)}<span class="flex-1">${label}</span>
-        <span class="text-[11px] tabular-nums text-ink-500">${n}</span></div>`;
+        <span class="count-badge">${n}</span></div>`;
     };
+    queueMicrotask(foldLabel);
     tree.innerHTML = special('all', 'All Documents', 'library', root.count)
-      + `<div class="my-1 border-t border-ink-100"></div>`
       + root.children.map((c) => nodeRow(c, 0)).join('')
-      + (root.own || sel === 'uncat' ? `<div class="my-1 border-t border-ink-100"></div>${special('uncat', UNCAT, 'inbox', root.own)}` : '');
+      + (root.own || sel === 'uncat' ? special('uncat', UNCAT, 'inbox', root.own) : '');
     if (!tree.querySelector('[tabindex="0"]')) tree.querySelector<HTMLElement>('[role=treeitem]')?.setAttribute('tabindex', '0');
   }
 
@@ -221,14 +282,44 @@ import Icon from '../components/Icon.astro';
     const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
     if (n) nodeMenu(e, n);
   });
-  $('#t-collapse').addEventListener('click', () => { open.clear(); saveOpen(); renderTree(); });
+  // one button: Collapse All when something is open, else Expand All
+  const foldLabel = () => { const any = withKids().some((p) => open.has(pathKey(p))); $('#t-collapse').textContent = any ? 'Collapse All' : 'Expand All'; $('#t-collapse').title = 'Right-click a category for more ways to fold'; };
+  $('#t-collapse').addEventListener('click', () => {
+    const all = withKids();
+    setOpen(all, !all.some((p) => open.has(pathKey(p))));
+  });
+
+  /** folding: this category, this and all below it, or everything */
+  function setOpen(paths: string[][], on: boolean) {
+    paths.forEach((p) => (on ? open.add(pathKey(p)) : open.delete(pathKey(p))));
+    saveOpen();
+    renderTree();
+  }
+  const withKids = () => allPaths(fullTree()).filter((p) => allPaths(fullTree()).some((q) => q.length > p.length && isUnder(q, p)));
+  function foldItems(s: Sel): MenuItem[] {
+    const all = withKids();
+    const items: MenuItem[] = [];
+    if (Array.isArray(s) && all.some((p) => pathKey(p) === pathKey(s))) {
+      const mine = all.filter((p) => isUnder(p, s));
+      items.push(open.has(pathKey(s)) ? { label: 'Collapse', icon: 'chevron', action: () => setOpen([s], false) } : { label: 'Expand', icon: 'right', action: () => setOpen([s], true) },
+        { label: 'Expand This and All Below', icon: 'folderOpen', action: () => setOpen(mine, true) },
+        { label: 'Collapse This and All Below', icon: 'folder', action: () => setOpen(mine, false) }, 'sep');
+    }
+    items.push({ label: 'Expand All', icon: 'folderOpen', disabled: !all.length, action: () => setOpen(all, true) },
+      { label: 'Collapse All', icon: 'folder', disabled: !all.length, action: () => setOpen(all, false) });
+    return items;
+  }
 
   function nodeMenu(at: MouseEvent | HTMLElement, n: HTMLElement) {
     const s = nodeSel(n);
-    if (!Array.isArray(s) || !canEdit()) return contextMenu(at, [{ label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) }]);
+    const show = { label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) };
+    if (!Array.isArray(s) || !canEdit()) return contextMenu(at, [{ heading: Array.isArray(s) ? catLabel(s) : s === 'uncat' ? UNCAT : 'All Documents' }, show, 'sep', ...foldItems(s)]);
     contextMenu(at, [
       { heading: catLabel(s) },
-      { label: 'Show These Documents', icon: 'folderOpen', action: () => select(s) },
+      show,
+      'sep',
+      ...foldItems(s),
+      'sep',
       { label: 'Rename or Move Category…', icon: 'edit', action: () => renameCategory(s) },
       { label: `Move Its Documents to ${UNCAT}`, icon: 'inbox', danger: true, action: () => dissolve(s) },
     ]);
@@ -286,12 +377,65 @@ import Icon from '../components/Icon.astro';
     } catch (er) { toastError(er); }
   }
 
+  // ------------------------------------------------------------ facets (year, source, added by, tags)
+  function facetGroup(key: keyof typeof ff, title: string, opts: { value: string; label: string; n: number; strong?: boolean }[]) {
+    if (!opts.length) return '';
+    return `<fieldset class="border-t border-ink-100 px-1.5 pt-2.5 pb-1.5 min-w-0">
+      <legend class="label !mb-1 px-1.5 float-left w-full">${title}</legend>
+      ${opts.map((o) => `<label class="flex items-center gap-lg h-[25px] px-1.5 hover:bg-ink-50 ${o.n || ff[key].has(o.value) ? 'text-ink-800' : 'text-ink-500'}">
+        <input type="checkbox" data-f="${key}" value="${esc(o.value)}" ${ff[key].has(o.value) ? 'checked' : ''} class="accent-brand-700" />
+        <span class="flex-1 min-w-0 truncate ${o.strong ? 'font-semibold' : ''}" title="${esc(o.label)}">${esc(o.label)}</span>
+        <span class="count-badge">${o.n}</span></label>`).join('')}</fieldset>`;
+  }
+
+  function renderFacets() {
+    const base = docs.filter(inSel);
+    const countBy = (skip: keyof typeof ff, keyOf: (d: Doc) => string[]) => {
+      const m = new Map<string, number>();
+      for (const d of base) if (facetOk(d, skip)) for (const k of keyOf(d)) m.set(k, (m.get(k) ?? 0) + 1);
+      for (const v of ff[skip]) if (!m.has(v)) m.set(v, 0);
+      return m;
+    };
+    const years = countBy('year', (d) => [yearKey(d)]);
+    const srcs = countBy('src', (d) => [d.source]);
+    const by = countBy('by', (d) => (d.created_by_name ? [d.created_by_name] : []));
+    const tags = countBy('tag', (d) => d.tags ?? []);
+    $('#facets').innerHTML =
+      facetGroup('year', 'Publication year', [...years.entries()].filter(([y]) => y !== 'none').sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([y, n]) => ({ value: y, label: y, n }))
+        .concat(years.has('none') ? [{ value: 'none', label: 'Year missing', n: years.get('none')!, strong: true }] : []))
+      + facetGroup('src', 'Source', [['bps', 'From BPS'], ['upload', 'Uploaded']].filter(([v]) => srcs.has(v!)).map(([v, l]) => ({ value: v!, label: l!, n: srcs.get(v!)! })))
+      + (canEdit() ? facetGroup('by', 'Added by', [...by.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, label: v, n }))) : '')
+      + facetGroup('tag', 'Tags', [...tags.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 30).map(([v, n]) => ({ value: v, label: v, n })));
+    // active filters, also shown above the list (with a way to remove them)
+    const chips: string[] = [];
+    for (const k of ['year', 'src', 'by', 'tag'] as const) for (const v of ff[k]) {
+      const label = k === 'year' ? (v === 'none' ? 'Year missing' : `Year ${v}`) : k === 'src' ? (v === 'bps' ? 'From BPS' : 'Uploaded') : k === 'by' ? `Added by ${v}` : `Tag: ${v}`;
+      chips.push(`<button data-unf="${k}" data-v="${esc(v)}" class="chip h-6 border-brand-300 bg-brand-50 text-ink-900 hover:border-brand-500" title="Remove this filter">${esc(label)}<span aria-hidden="true">×</span></button>`);
+    }
+    $('#active-filters').innerHTML = chips.join('') + (chips.length > 1 ? '<button data-unf="all" class="btn-ghost btn-sm !h-6 text-[12px]">Clear All</button>' : '');
+  }
+  $('#facets').addEventListener('change', (e) => {
+    const i = e.target as HTMLInputElement;
+    const k = i.dataset.f as keyof typeof ff | undefined;
+    if (!k) return;
+    i.checked ? ff[k].add(i.value) : ff[k].delete(i.value);
+    picked.clear(); writeUrl(); render();
+  });
+  $('#active-filters').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-unf]');
+    if (!b) return;
+    if (b.dataset.unf === 'all') Object.values(ff).forEach((s) => s.clear());
+    else ff[b.dataset.unf as keyof typeof ff].delete(b.dataset.v!);
+    writeUrl(); render();
+  });
+
   // ------------------------------------------------------------ documents
   function shownDocs() {
     const f = ($('#filter') as HTMLInputElement).value.trim().toLowerCase();
-    let ds = docs.filter((d) => inSel(d) && yearOk(d));
+    let ds = docs.filter((d) => inSel(d) && facetOk(d));
     const inNode = ds.length;
-    if (f) ds = ds.filter((d) => d.title.toLowerCase().includes(f) || d.filename.toLowerCase().includes(f));
+    if (f) ds = ds.filter((d) => [d.title, d.filename, ...(d.tags ?? []), d.created_by_name ?? '', String(d.year ?? '')].join(' ').toLowerCase().includes(f));
     return { ds, inNode, f };
   }
 
@@ -304,93 +448,76 @@ import Icon from '../components/Icon.astro';
       .sort((a, b) => (a.path.length ? orderOf.get(pathKey(a.path)) ?? 1e9 : 1e9 + 1) - (b.path.length ? orderOf.get(pathKey(b.path)) ?? 1e9 : 1e9 + 1));
   }
 
-  function badgeOf(d: Doc) {
+  function jobBadge(d: Doc) {
     const status = d.last_job_status;
     return status === 'running' || status === 'queued'
       ? `<span class="chip border-brand-200 bg-brand-50 text-brand-700">${icon('spinner', 'size-3')}finding tables</span>`
       : status === 'error' ? `<span class="chip border-red-200 bg-red-50 text-red-700">${icon('x', 'size-3')}finding tables failed</span>` : '';
   }
 
-  // card = <article>; the title link stretches over the card (no buttons nested inside a link)
-  function card(d: Doc) {
+  /** one document = one row: thumbnail, title, who added it, year and tags, counts, ⋮ menu */
+  function row(d: Doc) {
     const kind = kindOf(d);
     const fallback = d.source === 'bps' && d.meta.cover ? d.meta.cover : '';
     const on = picked.has(d.id);
-    return `<article data-doc="${d.id}" draggable="${canEdit()}" class="group panel p-4 flex gap-grid hover:border-brand-500 focus-within:border-brand-500 transition-colors relative ${on ? '!border-brand-500 bg-brand-50/40' : ''}">
+    const ed = canEdit();
+    const by = d.source === 'upload'
+      ? `<span class="src-tag is-upload">Upload</span>${d.created_by_name ? `Uploaded by <b class="font-semibold text-ink-900">${esc(d.created_by_name)}</b> · ` : 'Uploaded · '}${fmtDate(d.created_at)}`
+      : `<span class="src-tag">BPS</span>${esc(KIND_LABEL[kind] ?? kind)}${d.created_by_name ? ` · imported by ${esc(d.created_by_name)}` : ''} · ${fmtDate(d.created_at)}`;
+    const year = d.year
+      ? `<span class="tag-year" title="Publication year"><span class="text-ink-500 font-normal">Year</span> ${d.year}</span>`
+      : canTag(d) ? `<button data-edit="${d.id}" class="tag-miss">${icon('x', 'size-3')}Publication year missing · Set</button>` : '';
+    const tags = (d.tags ?? []).map((t) => `<button data-tag="${esc(t)}" class="tag-chip" title="Show documents tagged “${esc(t)}”">${esc(t)}</button>`).join('');
+    return `<article data-doc="${d.id}" draggable="${ed}" class="group flex items-start gap-3 py-2.5 pl-1 pr-1 border-b border-ink-100 ${on ? 'bg-brand-50' : 'hover:bg-ink-50/70'}">
       <input type="checkbox" data-pick="${d.id}" data-need="editor" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}"
-        class="absolute top-2 left-2 z-10 accent-brand-700 ${on || picked.size ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}" />
-      <div class="w-20 h-28 shrink-0 bg-ink-100 border border-ink-200 overflow-hidden">
+        class="self-start mt-1 accent-brand-700 ${on || picked.size ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}" />
+      <a href="/doc?id=${d.id}" tabindex="-1" aria-hidden="true" draggable="false" class="w-[46px] h-[62px] shrink-0 bg-ink-100 border border-ink-200 overflow-hidden">
         <img src="${api.thumbUrl(d.id)}" loading="lazy" alt="" draggable="false" class="w-full h-full object-cover object-top"
-             onerror="this.onerror=null;${fallback ? `this.src='${esc(fallback)}'` : "this.style.visibility='hidden'"}" />
-      </div>
-      <div class="flex-1 min-w-0 flex flex-col">
-        <div class="flex items-center gap-md mb-1.5 pr-14">
-          <span class="chip border-ink-200 text-ink-700 bg-ink-50">${KIND_LABEL[kind] ?? kind}</span>${badgeOf(d)}
+             onerror="this.onerror=null;${fallback ? `this.src='${esc(fallback)}'` : "this.style.visibility='hidden'"}" /></a>
+      <div class="flex-1 min-w-0">
+        <h3 class="text-[13.5px] font-semibold leading-snug text-ink-900 truncate">
+          <a href="/doc?id=${d.id}" draggable="false" class="hover:text-brand-700 hover:underline">${esc(d.title)}</a></h3>
+        <div class="text-[11.5px] text-ink-600 mt-px truncate">${by}</div>
+        <div class="flex flex-wrap items-center gap-sm mt-1.5">
+          ${year}${tags}${canTag(d) ? `<button data-edit="${d.id}" class="tag-add" title="Edit details and tags">+ Tag</button>` : ''}
+          <span class="w-px h-3.5 bg-ink-200 mx-0.5" aria-hidden="true"></span>
+          <span class="chip border-ink-200 bg-ink-50 text-ink-700">${plural(d.page_count, 'page')}</span>
+          <span class="chip border-ink-200 bg-ink-50 ${d.table_count ? 'text-ink-900' : 'text-ink-500'}">${plural(d.table_count ?? 0, 'table')}</span>
+          ${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="chip border-emerald-600/40 text-emerald-700 bg-surface hover:underline">${icon('flagOk', 'size-3')}${d.valid_count} valid</a>` : ''}
+          ${jobBadge(d)}
         </div>
-        <h3 class="text-[13.5px] font-medium leading-snug text-ink-900 line-clamp-3">
-          <a href="/doc?id=${d.id}" draggable="false" class="after:absolute after:inset-0 hover:text-brand-700 focus:outline-none">${esc(d.title)}</a></h3>
-        <div class="mt-auto pt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-600 whitespace-nowrap">
-          <span class="flex items-center gap-sm ${d.table_count ? 'text-ink-900 font-medium' : ''}">${icon('table', 'size-3.5')}${plural(d.table_count ?? 0, 'table')}</span>
-          ${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="relative z-10 flex items-center gap-sm text-emerald-700 font-medium hover:underline">${icon('flagOk', 'size-3.5')}${d.valid_count} valid</a>` : ''}
-          <span>${plural(d.page_count, 'page')}</span><span>${fmtBytes(d.size)}</span>
-          <span class="ml-auto">${ago(d.updated_at)}</span>
-        </div>
       </div>
-      <div data-need="editor" class="absolute top-2 right-2 z-10 flex">
-        <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
-        <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button>
-      </div>
+      <button data-kebab="${d.id}" class="btn-ghost btn-sm btn-icon shrink-0 text-ink-600" title="Actions (Menu key)" aria-haspopup="menu">${icon('kebab', 'size-4')}</button>
     </article>`;
-  }
-
-  function row(d: Doc) {
-    const on = picked.has(d.id);
-    return `<tr data-doc="${d.id}" draggable="${canEdit()}" class="group border-t border-ink-100 hover:bg-ink-50 ${on ? 'bg-brand-50/60' : ''}">
-      <td class="w-8 pl-3"><input type="checkbox" data-need="editor" data-pick="${d.id}" ${on ? 'checked' : ''} aria-label="Select ${esc(d.title)}" class="accent-brand-700" /></td>
-      <td class="py-1.5 pr-3 min-w-0"><div class="flex items-center gap-md">
-        <a href="/doc?id=${d.id}" draggable="false" class="text-ink-900 font-medium hover:text-brand-700 hover:underline line-clamp-2">${esc(d.title)}</a>${badgeOf(d)}</div></td>
-      <td class="px-2 whitespace-nowrap text-ink-600">${KIND_LABEL[kindOf(d)] ?? ''}</td>
-      <td class="px-2 text-right tabular-nums ${d.table_count ? 'text-ink-900' : 'text-ink-400'}">${d.table_count ?? 0}</td>
-      <td class="px-2 text-right tabular-nums">${d.valid_count ? `<a href="/tables?state=valid&docs=${d.id}" class="text-emerald-700 font-medium hover:underline">${d.valid_count}</a>` : '<span class="text-ink-400">0</span>'}</td>
-      <td class="px-2 text-right tabular-nums text-ink-600">${d.page_count}</td>
-      <td class="px-2 whitespace-nowrap text-ink-500">${ago(d.updated_at)}</td>
-      <td class="pr-2 whitespace-nowrap text-right" data-need="editor">
-        <button data-move="${d.id}" title="Move to category" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-brand-700">${icon('folder', 'size-3.5')}</button>
-        <button data-del="${d.id}" title="Delete document (can be undone)" class="btn-ghost btn-sm btn-icon text-ink-500 hover:!text-red-700">${icon('trash', 'size-3.5')}</button></td>
-    </tr>`;
   }
 
   function groupHead(path: string[], n: number) {
     const base = Array.isArray(sel) ? sel.length : 0;
     const label = path.length
-      ? path.map((p, i) => i < base ? `<span class="text-ink-500">${esc(p)}</span>` : `<span class="text-ink-900">${esc(p)}</span>`).join('<span class="text-ink-300 px-1">/</span>')
-      : `<span class="text-ink-900">${UNCAT}</span>`;
-    return `<button data-go="${esc(path.length ? pathKey(path) : 'uncat')}" class="flex items-center gap-md mb-2 text-[12.5px] font-semibold hover:underline text-left">
-      ${icon(path.length ? 'folder' : 'inbox', 'size-4 text-ink-400')}<span>${label}</span><span class="text-[11px] font-normal text-ink-500">${n}</span></button>`;
+      ? path.map((p, i) => `<span class="${i < base ? 'text-ink-500' : 'text-ink-800'}">${esc(p)}</span>`).join('<span class="text-ink-400 px-1" aria-hidden="true">›</span>')
+      : `<span class="text-ink-800">${UNCAT}</span>`;
+    return `<h2 class="flex items-center gap-md pt-4 pb-1.5 border-b border-ink-300 text-[12.5px] font-semibold">
+      <button data-go="${esc(path.length ? pathKey(path) : 'uncat')}" class="hover:underline text-left">${label}</button>
+      <span class="ml-auto text-[11.5px] font-normal text-ink-500">${plural(n, 'document')}</span></h2>`;
   }
 
   function renderList() {
     const { ds, inNode, f } = shownDocs();
     count.textContent = f ? `${ds.length} of ${plural(inNode, 'document')}` : plural(inNode, 'document');
+    $('#totals').textContent = docs.length ? `${plural(docs.length, 'document')} · ${plural(docs.reduce((n, d) => n + (d.table_count ?? 0), 0), 'table')}` : '';
     empty.classList.toggle('hidden', docs.length > 0);
     list.classList.toggle('hidden', docs.length === 0);
     if (!ds.length) {
-      list.innerHTML = `<div class="panel p-8 text-center text-[13px] text-ink-600">${f ? `No document title here contains “${esc(f)}”.
-        <button id="clearf" class="btn-line btn-sm ml-2">Clear Filter</button>` : year ? `No documents ${year === 'none' ? 'without a year' : `from ${year}`} here.
-        <button id="cleary" class="btn-line btn-sm ml-2">All Years</button>` : 'No documents in this category.'}</div>`;
-      $('#cleary')?.addEventListener('click', () => { year = ''; writeUrl(); render(); });
+      const filtered = Object.values(ff).some((s) => s.size);
+      list.innerHTML = `<div class="p-10 text-center text-[13px] text-ink-600">${f ? `No document here matches “${esc(f)}”.
+        <button id="clearf" class="btn-line btn-sm ml-2">Clear Search</button>` : filtered ? `No documents match the filters here.
+        <button id="clearff" class="btn-line btn-sm ml-2">Clear Filters</button>` : 'No documents in this category.'}</div>`;
+      $('#clearff')?.addEventListener('click', () => { Object.values(ff).forEach((s) => s.clear()); writeUrl(); render(); });
       $('#clearf')?.addEventListener('click', () => { ($('#filter') as HTMLInputElement).value = ''; render(); });
       return;
     }
     const gs = groups(ds);
-    const single = gs.length === 1 && Array.isArray(sel) && sameSel(gs[0]!.path, sel);
-    list.innerHTML = gs.map((g) => `<section class="mb-5">${single ? '' : groupHead(g.path, g.items.length)}${view === 'grid'
-      ? `<div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 min-[1800px]:grid-cols-4 gap-3">${g.items.map(card).join('')}</div>`
-      : `<div class="panel overflow-x-auto"><table class="w-full text-[12.5px]">
-          <thead><tr class="text-[11px] uppercase tracking-wider text-ink-500 text-left"><th class="w-8 pl-3 py-1.5"><span class="sr-only">Select</span></th>
-            <th class="py-1.5 pr-3 font-semibold">Title</th><th class="px-2 font-semibold">Type</th><th class="px-2 text-right font-semibold">Tables</th>
-            <th class="px-2 text-right font-semibold">Valid</th><th class="px-2 text-right font-semibold">Pages</th><th class="px-2 font-semibold">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
-          <tbody>${g.items.map(row).join('')}</tbody></table></div>`}</section>`).join('');
+    list.innerHTML = gs.map((g) => `<section aria-label="${esc(catLabel(g.path))}">${groupHead(g.path, g.items.length)}${g.items.map(row).join('')}</section>`).join('');
   }
 
   function renderCrumbs() {
@@ -400,21 +527,8 @@ import Icon from '../components/Icon.astro';
     else if (Array.isArray(sel)) sel.forEach((p, i) => parts.push(i === sel!.length - 1
       ? `<span class="text-ink-900 font-semibold">${esc(p)}</span>`
       : `<button data-go="${esc(pathKey((sel as string[]).slice(0, i + 1)))}" class="hover:underline">${esc(p)}</button>`));
-    c.innerHTML = parts.join(`<span class="text-ink-300" aria-hidden="true">${icon('right', 'size-3.5')}</span>`);
+    c.innerHTML = parts.join(`<span class="text-ink-400" aria-hidden="true">›</span>`);
   }
-
-  function renderYears() {
-    const counts = new Map<string, number>();
-    for (const d of docs) if (inSel(d)) { const y = docYear(d) ?? 'none'; counts.set(y, (counts.get(y) ?? 0) + 1); }
-    if (year && !counts.has(year)) counts.set(year, 0);
-    const ys = [...counts.keys()].filter((y) => y !== 'none').sort((a, b) => b.localeCompare(a));
-    const n = [...counts.values()].reduce((a, b) => a + b, 0);
-    $<HTMLSelectElement>('#year').innerHTML = `<option value="">All years (${n})</option>`
-      + ys.map((y) => `<option value="${y}">${y} (${counts.get(y)})</option>`).join('')
-      + (counts.has('none') ? `<option value="none">No year (${counts.get('none')})</option>` : '');
-    $<HTMLSelectElement>('#year').value = year;
-  }
-  $('#year').addEventListener('change', () => { year = $<HTMLSelectElement>('#year').value; picked.clear(); writeUrl(); render(); });
 
   function renderSel() {
     const bar = $('#selbar');
@@ -427,76 +541,228 @@ import Icon from '../components/Icon.astro';
     // a category that no longer exists (moved / renamed elsewhere) falls back to "All"
     if (Array.isArray(sel) && !docs.some((d) => isUnder(cat(d), sel as string[]))) sel = null;
     for (const id of picked) if (!docs.some((d) => d.id === id)) picked.delete(id);
-    // the tree counts follow the year filter; the year counts follow the open category
-    root = buildTree(docs.filter(yearOk).map((d) => ({ category: cat(d) })));
-    renderYears();
-    $$<HTMLElement>('[data-view]').forEach((b) => { const on = b.dataset.view === view; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('!bg-ink-100', on); });
-    renderTree(); renderCrumbs(); renderList(); renderSel();
+    // the tree counts follow the filters; the filter counts follow the open category
+    root = buildTree(docs.filter((d) => facetOk(d)).map((d) => ({ category: cat(d) })));
+    renderTree(); renderFacets(); renderCrumbs(); renderList(); renderSel();
+    $('#catlist').innerHTML = allPaths(fullTree()).map((p) => `<option value="${esc(p.join(SEP))}"></option>`).join('');
+    $('#taglist').innerHTML = allTags().map((t) => `<option value="${esc(t)}"></option>`).join('');
   }
 
   async function load() {
     try {
       docs = await api.documents();
-      root = buildTree(docs.map((d) => ({ category: cat(d) })));
       render();
-      if (docs.some((d) => d.last_job_status === 'running' || d.last_job_status === 'queued')) setTimeout(load, 2000);
+      if (docs.some((d) => d.last_job_status === 'running' || d.last_job_status === 'queued')) setTimeout(load, 3000);
     } catch (e: any) {
-      list.innerHTML = `<div class="panel p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p>
+      list.innerHTML = `<div class="p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p>
         <button id="reload" class="btn-primary mt-3">Retry</button></div>`;
       $('#reload').addEventListener('click', load);
     }
   }
 
-  // ------------------------------------------------------------ upload (into the selected category)
-  async function uploadOne(f: File, extract: boolean): Promise<Doc | null> {
-    const ph = document.createElement('div');
-    ph.className = 'panel p-4 mb-3 flex flex-col gap-lg text-[13px] text-ink-700';
-    ph.setAttribute('role', 'status');
-    ph.innerHTML = `<div class="flex items-center gap-lg">${icon('spinner', 'size-4 text-brand-600')}<span class="flex-1 min-w-0 truncate">Uploading <b class="text-ink-900">${esc(f.name)}</b></span>
-      <span data-pct class="tabular-nums text-ink-600">0 of ${fmtBytes(f.size)}</span></div>
-      <div class="h-1 bg-ink-100"><div data-bar class="h-full bg-brand-500 transition-[width]" style="width:0%"></div></div>`;
-    list.classList.remove('hidden'); empty.classList.add('hidden');
-    list.prepend(ph);
-    try {
-      const r = await api.upload(f, extract, 'auto', (done, total) => {
-        ph.querySelector<HTMLElement>('[data-bar]')!.style.width = `${(100 * done) / total}%`;
-        ph.querySelector('[data-pct]')!.textContent = done >= total ? 'Reading the PDF…' : `${fmtBytes(done)} of ${fmtBytes(total)}`;
-      });
-      // dropped while a category is open: file it there
-      if (Array.isArray(sel) && !r.document.category?.length) await api.setCategory(r.document.id, sel);
-      return r.document;
-    } catch (e: any) {
-      toast(`${f.name} was not uploaded: ${e.message}`, 'error', { action: { label: 'Retry', run: () => upload([f]) } });
-      return null;
-    } finally { ph.remove(); }
+  // ------------------------------------------------------------ year picker options (shared by both modals)
+  const thisYear = new Date().getFullYear();
+  const yearOptions = (placeholder: string) => `<option value="">${placeholder}</option>`
+    + Array.from({ length: thisYear + 1 - 1950 + 1 }, (_, i) => thisYear + 1 - i).map((y) => `<option>${y}</option>`).join('');
+  /** "laporan-ipm-2024.pdf" -> 2024 (the last year in the name) */
+  const yearFromName = (name: string) => {
+    const ys = [...name.replace(/\.pdf$/i, '').matchAll(/(?<!\d)(19[5-9]\d|20\d\d)(?!\d)/g)].map((m) => +m[1]!);
+    return ys.length ? ys.at(-1)! : null;
+  };
+
+  // ------------------------------------------------------------ upload modal
+  interface Pending { file: File; year: number | null; cat: string; tags: TagInput | null; init: string[]; state: 'ready' | 'uploading' | 'error'; done: number }
+  let pend: Pending[] = [];
+  const updlg = $<HTMLDialogElement>('#updlg');
+  $<HTMLSelectElement>('#all-year').innerHTML = yearOptions('–');
+
+  function openUpload(files?: FileList | File[]) {
+    if (!canEdit()) return;
+    if (!updlg.open) { pend = []; updlg.showModal(); }
+    if (files) addFiles(files); else renderUpload();
   }
 
-  async function upload(files: FileList | File[]) {
+  function addFiles(files: FileList | File[]) {
     const all = [...files];
     const pdfs = all.filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    if (!pdfs.length) return toast('Only PDF files can be uploaded.', 'error', { action: { label: 'Choose Files', run: () => $<HTMLInputElement>('#file').click() } });
     if (pdfs.length < all.length) toast(`${plural(all.length - pdfs.length, 'file')} skipped: not a PDF.`, 'info');
-    const extract = ($('#auto') as HTMLInputElement).checked;
-    let last: Doc | null = null;
-    for (const f of pdfs) last = (await uploadOne(f, extract)) ?? last;
-    if (pdfs.length === 1 && last) location.href = `/doc?id=${last.id}`;
-    else load();
+    const where = Array.isArray(sel) ? sel.join(SEP) : '';
+    for (const f of pdfs) {
+      if (pend.some((p) => p.file.name === f.name && p.file.size === f.size)) continue;
+      pend.push({ file: f, year: yearFromName(f.name), cat: where, tags: null, init: [], state: 'ready', done: 0 });
+    }
+    renderUpload();
   }
 
-  for (const b of ['#pick', '#pick2']) $(b).addEventListener('click', () => $<HTMLInputElement>('#file').click());
-  $('#file').addEventListener('change', (e) => { const i = e.target as HTMLInputElement; if (i.files) upload(i.files); i.value = ''; });
+  function renderUpload() {
+    pend.forEach((p) => { if (p.tags) p.init = p.tags.get(); }); // keep tags typed before a re-render
+    const has = pend.length > 0;
+    $('#up-files').classList.toggle('hidden', !has);
+    const drop = $('#up-drop');
+    drop.classList.toggle('h-36', !has); drop.classList.toggle('h-11', has);
+    drop.classList.toggle('flex-col', !has); drop.classList.toggle('flex-row', has);
+    $('#up-t').textContent = has ? `Upload ${plural(pend.length, 'PDF')}` : 'Upload PDFs';
+    $('#up-sub').textContent = has ? '· set at least the publication year of each file' : '';
+    $('#up-rows').innerHTML = pend.map((p, i) => `<tr data-i="${i}" class="border-b border-ink-100 align-top">
+      <td class="px-2 py-2"><div class="font-semibold text-ink-900 break-all">${esc(p.file.name)}</div>
+        <div class="text-[11.5px] text-ink-500">${fmtBytes(p.file.size)}${yearFromName(p.file.name) ? ' · year read from the file name' : ''}</div>
+        ${p.state === 'uploading' ? `<div class="h-1 mt-1 bg-ink-100"><div class="h-full bg-brand-500" style="width:${p.done}%"></div></div>` : ''}</td>
+      <td class="px-2 py-2"><select data-year aria-label="Publication year of ${esc(p.file.name)}" aria-required="true" class="field h-8 w-full ${p.year ? '' : '!border-ink-800 !border-2'}">${yearOptions('Year…')}</select>
+        ${p.year ? '' : `<div class="text-[11px] font-semibold text-ink-900 mt-1">${icon('x', 'size-3 inline')} Required</div>`}</td>
+      <td class="px-2 py-2"><input data-cat list="catlist" value="${esc(p.cat)}" aria-label="Category of ${esc(p.file.name)}" class="field h-8 w-full" placeholder="${UNCAT}" /></td>
+      <td class="px-2 py-2"><div data-tags></div></td>
+      <td class="py-2"><button data-rmfile="${i}" class="btn-ghost btn-sm btn-icon" title="Remove from this upload">${icon('x', 'size-3.5')}</button></td></tr>`).join('');
+    $$<HTMLTableRowElement>('#up-rows tr').forEach((tr) => {
+      const p = pend[+tr.dataset.i!]!;
+      tr.querySelector<HTMLSelectElement>('[data-year]')!.value = p.year ? String(p.year) : '';
+      p.tags = tagInput(tr.querySelector<HTMLElement>('[data-tags]')!, p.init, allTags(), `Tags of ${p.file.name}`);
+    });
+    const missing = pend.filter((p) => !p.year).length;
+    $('#up-need').innerHTML = missing ? `${icon('x', 'size-3 inline')} ${plural(missing, 'file needs', 'files need')} a publication year` : '';
+    $<HTMLButtonElement>('#up-go').disabled = !has || missing > 0 || pend.some((p) => p.state === 'uploading');
+    $('#up-go-l').textContent = has ? `Upload ${plural(pend.length, 'File')}` : 'Upload';
+  }
+
+  $('#up-rows').addEventListener('change', (e) => {
+    const t = e.target as HTMLElement;
+    const p = pend[+(t.closest<HTMLElement>('tr')?.dataset.i ?? -1)];
+    if (!p) return;
+    if (t.matches('[data-year]')) { p.year = +(t as HTMLSelectElement).value || null; renderUpload(); }
+    if (t.matches('[data-cat]')) p.cat = (t as HTMLInputElement).value;
+  });
+  $('#up-rows').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-rmfile]');
+    if (b) { pend.splice(+b.dataset.rmfile!, 1); renderUpload(); }
+  });
+  $('#all-apply').addEventListener('click', () => {
+    const y = +$<HTMLSelectElement>('#all-year').value || null;
+    const c = $<HTMLInputElement>('#all-cat').value.trim();
+    const t = $<HTMLInputElement>('#all-tags').value.split(',').map((x) => x.trim()).filter(Boolean);
+    pend.forEach((p) => {
+      if (y) p.year = y;
+      if (c) p.cat = c;
+      if (t.length) p.init = cleanTags([...(p.tags?.get() ?? p.init), ...t]);
+      p.tags = null;
+    });
+    renderUpload();
+  });
+  $('#up-drop').addEventListener('click', () => $<HTMLInputElement>('#file').click());
+  $('#file').addEventListener('change', (e) => { const i = e.target as HTMLInputElement; if (i.files) openUpload(i.files); i.value = ''; });
+  updlg.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('[data-close]') || e.target === updlg) {
+      if (pend.some((p) => p.state === 'uploading')) return; // closing would hide the progress
+      updlg.close();
+    }
+  });
+  updlg.addEventListener('cancel', (e) => { if (pend.some((p) => p.state === 'uploading')) e.preventDefault(); });
+  // files dropped on the modal
+  updlg.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('#up-drop').classList.add('!border-brand-500', '!bg-brand-50'); } });
+  updlg.addEventListener('dragleave', () => $('#up-drop').classList.remove('!border-brand-500', '!bg-brand-50'));
+  updlg.addEventListener('drop', (e) => {
+    if (!e.dataTransfer?.files.length) return;
+    e.preventDefault(); e.stopPropagation();
+    $('#up-drop').classList.remove('!border-brand-500', '!bg-brand-50');
+    addFiles(e.dataTransfer.files);
+  });
+
+  $('#up-go').addEventListener('click', async () => {
+    pend.forEach((p) => p.tags?.flush());
+    const extract = $<HTMLInputElement>('#auto').checked;
+    saveSettings({ findTablesOnUpload: extract });
+    const failed: Pending[] = [];
+    for (const p of [...pend]) {
+      p.init = p.tags?.get() ?? p.init;
+      p.state = 'uploading'; p.done = 0; renderUpload();
+      try {
+        await api.upload(p.file, extract, 'auto', (d, t) => {
+          p.done = Math.round((100 * d) / t);
+          const bar = $(`#up-rows tr[data-i="${pend.indexOf(p)}"] .bg-brand-500`);
+          if (bar) bar.style.width = `${p.done}%`;
+        }, { year: p.year!, tags: p.init, category: p.cat.trim() ? parsePath(p.cat) : null });
+        pend = pend.filter((x) => x !== p);
+      } catch (er: any) {
+        p.state = 'error';
+        failed.push(p);
+        toast(`${p.file.name} was not uploaded: ${er.message}`, 'error');
+      }
+      renderUpload();
+    }
+    dispatchEvent(new Event('tdp-queue')); // tables are being found: the Queue badge
+    await load();
+    if (!failed.length) updlg.close();
+    else failed.forEach((p) => (p.state = 'ready'));
+  });
+
+  for (const b of ['#pick', '#pick2']) $(b).addEventListener('click', () => openUpload());
+
+  // ------------------------------------------------------------ edit details and tags (modal)
+  const eddlg = $<HTMLDialogElement>('#eddlg');
+  $<HTMLSelectElement>('#ed-year').innerHTML = yearOptions('Year…');
+  let editing: Doc | null = null;
+  let edTags: TagInput | null = null;
+
+  function openEdit(id: string, focusTags = false) {
+    const d = docs.find((x) => x.id === id);
+    if (!d || !canEdit()) return;
+    editing = d;
+    $('#ed-head').innerHTML = `<img src="${api.thumbUrl(d.id)}" alt="" class="w-9 h-12 object-cover object-top bg-ink-100 border border-ink-200" onerror="this.style.visibility='hidden'" />
+      <div class="min-w-0"><div class="font-semibold text-ink-900 truncate">${esc(d.title)}</div>
+      <div class="text-[11.5px] text-ink-600 truncate"><span class="src-tag ${d.source === 'upload' ? 'is-upload' : ''}">${d.source === 'upload' ? 'Upload' : 'BPS'}</span>${d.created_by_name ? `${d.source === 'upload' ? 'Uploaded' : 'Imported'} by <b class="text-ink-800">${esc(d.created_by_name)}</b> · ` : ''}${fmtDate(d.created_at)} · ${esc(d.filename)} · ${plural(d.page_count, 'page')}</div></div>`;
+    $<HTMLInputElement>('#ed-title').value = d.title;
+    $<HTMLSelectElement>('#ed-year').value = d.year ? String(d.year) : '';
+    $<HTMLInputElement>('#ed-cat').value = cat(d).join(SEP);
+    const tagOk = canTag(d);
+    $<HTMLSelectElement>('#ed-year').disabled = !tagOk;
+    $('#ed-t').textContent = tagOk ? 'Edit Details and Tags' : 'Edit Details';
+    if (tagOk) {
+      edTags = tagInput($('#ed-tags'), d.tags ?? [], allTags(), 'Tags');
+      $('#ed-tags input')!.setAttribute('aria-labelledby', 'ed-tags-l');
+      const sugg = allTags().filter((t) => !(d.tags ?? []).includes(t)).slice(0, 6);
+      $('#ed-sugg').innerHTML = 'Press Enter or comma to add.' + (sugg.length ? ` Suggestions: ${sugg.map((t) => `<button type="button" data-sugg="${esc(t)}" class="underline hover:text-brand-700">${esc(t)}</button>`).join(' · ')}` : '');
+    } else { // a BPS document, opened by an editor: year and tags are shown, not editable
+      edTags = null;
+      $('#ed-tags').className = 'flex flex-wrap gap-sm min-h-8 items-center';
+      $('#ed-tags').innerHTML = (d.tags ?? []).map((t) => `<span class="tag-chip">${esc(t)}</span>`).join('') || '<span class="text-ink-500">No tags</span>';
+      $('#ed-sugg').textContent = 'Only an admin can change the year and tags of a document from BPS.';
+    }
+    eddlg.showModal();
+    (tagOk && focusTags && d.year ? $<HTMLInputElement>('#ed-tags input') : d.year || !tagOk ? $<HTMLInputElement>('#ed-title') : $<HTMLSelectElement>('#ed-year')).focus();
+  }
+  $('#ed-sugg').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sugg]');
+    if (b && edTags) { edTags.set([...edTags.get(), b.dataset.sugg!]); b.remove(); }
+  });
+  eddlg.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-close]') || e.target === eddlg) eddlg.close(); });
+  $('#edform').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    edTags?.flush();
+    const year = +$<HTMLSelectElement>('#ed-year').value;
+    const title = $<HTMLInputElement>('#ed-title').value.trim();
+    if (!title || (edTags && !year)) return;
+    const category = parsePath($<HTMLInputElement>('#ed-cat').value);
+    try {
+      await api.patchDocument(editing.id, edTags ? { title, year, tags: edTags.get(), category } : { title, category });
+      eddlg.close();
+      await load();
+    } catch (er) { toastError(er); }
+  });
 
   // ------------------------------------------------------------ drag: PDF files from the OS = upload; documents onto the tree = move
   const DOC_MIME = 'application/x-tabel-docs';
-  const drop = $('#drop');
   const isFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
   const isDocs = (e: DragEvent) => !!e.dataTransfer?.types.includes(DOC_MIME);
-  addEventListener('dragover', (e) => { if (isFiles(e) && canEdit()) { e.preventDefault(); drop.classList.add('!border-brand-500', '!bg-brand-50'); } });
-  addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('!border-brand-500', '!bg-brand-50'); });
+  const dropall = $('#dropall');
+  addEventListener('dragover', (e) => {
+    if (!isFiles(e) || !canEdit() || updlg.open) return;
+    e.preventDefault(); dropall.classList.replace('hidden', 'grid');
+  });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) dropall.classList.replace('grid', 'hidden'); });
   addEventListener('drop', (e) => {
-    if (!isFiles(e) || !canEdit()) return;
-    e.preventDefault(); drop.classList.remove('!border-brand-500', '!bg-brand-50');
-    if (e.dataTransfer?.files.length) upload(e.dataTransfer.files);
+    dropall.classList.replace('grid', 'hidden');
+    if (!isFiles(e) || !canEdit() || updlg.open) return;
+    e.preventDefault();
+    if (e.dataTransfer?.files.length) openUpload(e.dataTransfer.files);
   });
   list.addEventListener('dragstart', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
@@ -529,7 +795,6 @@ import Icon from '../components/Icon.astro';
 
   // ------------------------------------------------------------ list actions
   $('#filter').addEventListener('input', debounce(render, 120));
-  $$<HTMLElement>('[data-view]').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view as 'grid' | 'list'; localStorage.setItem('lib-view', view); render(); }));
   $('#crumbs').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-go]');
     if (b) select(b.dataset.go === 'all' ? null : JSON.parse(b.dataset.go!));
@@ -550,9 +815,16 @@ import Icon from '../components/Icon.astro';
       await api.deleteDocument(d.id);
       docs = docs.filter((x) => x.id !== d.id);
       picked.delete(d.id);
-      root = buildTree(docs.map((x) => ({ category: cat(x) })));
       render();
       toast(`Deleted “${d.title.slice(0, 60)}”`, 'info', { action: { label: 'Undo', run: async () => { await api.restoreDocument(d.id); await load(); } } });
+    } catch (er) { toastError(er); }
+  }
+
+  async function findAgain(d: Doc) {
+    try {
+      await api.startJob(d.id, 'auto', null);
+      dispatchEvent(new Event('tdp-queue'));
+      await load();
     } catch (er) { toastError(er); }
   }
 
@@ -560,34 +832,42 @@ import Icon from '../components/Icon.astro';
     const t = e.target as HTMLElement;
     const go = t.closest<HTMLElement>('[data-go]');
     if (go) return select(go.dataset.go === 'uncat' ? 'uncat' : JSON.parse(go.dataset.go!));
-    const mv = t.closest<HTMLElement>('[data-move]');
-    if (mv) return void moveDocs(picked.has(mv.dataset.move!) ? [...picked] : [mv.dataset.move!]);
-    const b = t.closest<HTMLElement>('[data-del]');
-    if (b) { const d = docs.find((x) => x.id === b.dataset.del); if (d) del(d); }
+    const ed = t.closest<HTMLElement>('[data-edit]');
+    if (ed) return openEdit(ed.dataset.edit!, ed.classList.contains('tag-add'));
+    const tag = t.closest<HTMLElement>('[data-tag]');
+    if (tag) { ff.tag.add(tag.dataset.tag!); writeUrl(); render(); return; }
+    const k = t.closest<HTMLElement>('[data-kebab]');
+    if (k) docMenu(k, k.dataset.kebab!);
   });
 
   function docMenu(at: MouseEvent | HTMLElement, id: string) {
     const d = docs.find((x) => x.id === id);
     if (!d) return;
     const many = picked.has(id) && picked.size > 1;
-    if (!canEdit()) return contextMenu(at, [{ heading: d.title }, { label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) }]);
-    contextMenu(at, [
+    const openIt = { label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) };
+    const pdf = { label: 'Download PDF', icon: 'download', action: () => window.open(api.pdfUrl(id), '_blank', 'noopener') };
+    if (!canEdit()) return contextMenu(at, [{ heading: d.title }, openIt, pdf]);
+    const items: MenuItem[] = [
       { heading: many ? `${picked.size} documents` : d.title },
-      ...(many ? [] : [{ label: 'Open', icon: 'external', action: () => (location.href = `/doc?id=${id}`) }]),
+      ...(many ? [] : [openIt, { label: `<b>${canTag(d) ? 'Edit Details and Tags…' : 'Edit Details…'}</b>`, icon: 'edit', action: () => openEdit(id) }]),
       { label: many ? `Move ${picked.size} Documents to Category…` : 'Move to Category…', icon: 'folder', action: () => moveDocs(many ? [...picked] : [id]) },
-      ...(!many && cat(d).length ? [{ label: `Show “${cat(d).at(-1)}”`, icon: 'folderOpen', action: () => select(cat(d)) }] : []),
       ...(!many && d.source === 'bps' ? [{ label: 'Automatic Category (BPS Subject)', icon: 'wand', action: () => moveDocs([id], 'auto') }] : []),
       'sep',
-      ...(many ? [] : [{ label: 'Delete Document', icon: 'trash', danger: true, action: () => del(d) }]),
-    ]);
+      ...(many ? [] : [
+        { label: 'Find Tables Again', icon: 'play', disabled: d.last_job_status === 'running' || d.last_job_status === 'queued', action: () => findAgain(d) },
+        pdf, 'sep' as const,
+        { label: 'Delete…', icon: 'trash', danger: true, action: () => del(d) },
+      ]),
+    ];
+    contextMenu(at, items);
   }
   list.addEventListener('contextmenu', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
-    if (el) docMenu(e, el.dataset.doc!);
+    if (el && !(e.target as HTMLElement).closest('a[href]:not([aria-hidden])')) docMenu(e, el.dataset.doc!);
   });
   list.addEventListener('keydown', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-doc]');
-    if (el && isMenuKey(e)) { e.preventDefault(); docMenu(el, el.dataset.doc!); }
+    if (el && isMenuKey(e)) { e.preventDefault(); docMenu(el.querySelector<HTMLElement>('[data-kebab]') ?? el, el.dataset.doc!); }
   });
 
   addEventListener('popstate', () => { readUrl(); render(); });

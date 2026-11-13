@@ -76,4 +76,5 @@ export const googleUrl = (next = location.pathname + location.search) => `/api/a
 export const loginUrl = (next = location.pathname + location.search) => `/login?next=${encodeURIComponent(next)}`;
 
 /** inline script for <head>: set the remembered role before the first paint */
-export const EARLY = `document.documentElement.dataset.role=localStorage.getItem('${KEY}')||'public'`;
+export const EARLY = `document.documentElement.dataset.role=localStorage.getItem('${KEY}')||'public';`
+  + `try{var t=JSON.parse(localStorage.getItem('tdp-settings')||'{}').theme;if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`;

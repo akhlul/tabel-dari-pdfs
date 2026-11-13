@@ -84,7 +84,7 @@ def save_tables(con, doc_id: str, page: int, tables: list[Table], *, job_id: str
 
 
 def create_job(doc: dict, engine: str, pages: list[int] | None, replace: bool = True,
-               by: str | None = None) -> dict:
+               by: str | None = None, limit: bool = True) -> dict:
     """Queue an extraction job. Raises JobConflict when one is already active on the document (two jobs on one
     document would overwrite each other's tables), or when `by` already has JOBS_PER_USER jobs waiting / running."""
     if engine not in ENGINES or not ENGINES[engine].available:
@@ -99,7 +99,7 @@ def create_job(doc: dict, engine: str, pages: list[int] | None, replace: bool = 
         if (running := active_job(con, doc["id"])):
             raise JobConflict("Tables are already being found in this document. Wait until that finishes, "
                               "or cancel it first.", running)
-        if by and JOBS_PER_USER and con.execute(f"SELECT COUNT(*) FROM jobs WHERE created_by=? AND {db.ACTIVE_JOB}",
+        if limit and by and JOBS_PER_USER and con.execute(f"SELECT COUNT(*) FROM jobs WHERE created_by=? AND {db.ACTIVE_JOB}",
                                                 (by,)).fetchone()[0] >= JOBS_PER_USER:
             raise JobConflict(f"You already have {JOBS_PER_USER} documents being processed. "
                               "Wait until one finishes.")

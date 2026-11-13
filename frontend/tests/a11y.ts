@@ -15,7 +15,7 @@ const BASE = process.env.BASE ?? 'http://127.0.0.1:14433';
 const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 
 const docs = (await (await fetch(`${BASE}/api/documents`)).json()) as { id: string }[];
-const pages = ['/', '/search', '/tables?state=none,valid,invalid', ...(docs[0] ? [`/doc?id=${docs[0].id}`] : [])];
+const pages = ['/', '/import-from-bps', '/tables?state=none,valid,invalid', ...(docs[0] ? [`/doc?id=${docs[0].id}`] : [])];
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME ?? '/usr/bin/google-chrome-stable', headless: true });
 let failed = 0;

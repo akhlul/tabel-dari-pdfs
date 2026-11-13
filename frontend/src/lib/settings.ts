@@ -2,16 +2,17 @@
 import { api } from './api';
 
 export interface Settings {
-  /** Search BPS: 'auto' = detect the province from where you are, else a 4-digit BPS domain */
+  /** BPS catalog: 'auto' = detect the province from where you are, else a 4-digit BPS domain */
   region: string;
   /** use the browser's location (asks permission once) before falling back to the internet address */
   useBrowserLocation: boolean;
-  /** Search BPS: reopen with the last kind / region / year / month / language (never the keyword) */
+  /** BPS catalog: reopen with the last kind / region / year / month / language (never the keyword) */
   rememberSearch: boolean;
   searchLang: 'ind' | 'eng';
   /** Library */
-  libraryView: 'grid' | 'list';
   findTablesOnUpload: boolean;
+  /** Appearance: 'system' follows the light / dark setting of the computer */
+  theme: 'system' | 'light' | 'dark';
   /** Export */
   decimal: 'auto' | ',' | '.';
   exportTitle: boolean;
@@ -19,7 +20,7 @@ export interface Settings {
 
 export const DEFAULTS: Settings = {
   region: 'auto', useBrowserLocation: true, rememberSearch: true, searchLang: 'ind',
-  libraryView: 'grid', findTablesOnUpload: true, decimal: 'auto', exportTitle: false,
+  findTablesOnUpload: true, theme: 'system', decimal: 'auto', exportTitle: false,
 };
 
 const KEY = 'tdp-settings';
@@ -81,9 +82,15 @@ export async function locate(force = false): Promise<Located | null> {
   return out;
 }
 
-/** default region for Search BPS: the fixed setting, or the detected province, or Pusat */
+/** default region for BPS catalog: the fixed setting, or the detected province, or Pusat */
 export async function defaultRegion(): Promise<string> {
   const s = getSettings();
   if (s.region !== 'auto') return s.region;
   return (await locate())?.domain ?? '0000';
+}
+
+/** light / dark: as the system, or as chosen in Settings (html[data-theme], see global.css) */
+export function applyTheme(theme = getSettings().theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
 }

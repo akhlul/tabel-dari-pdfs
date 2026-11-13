@@ -1,0 +1,398 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+const thisYear = new Date().getFullYear();
+const years = Array.from({ length: thisYear - 1999 }, (_, i) => thisYear - i);
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+---
+<Layout title="BPS Catalog" active="search">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-ink-900 tracking-tight">BPS Catalog</h1>
+    <p class="text-[13px] text-ink-600 mt-0.5">Find publications (Publikasi) and press releases (Berita Resmi Statistik) on bps.go.id and import their PDFs into the Library.
+      Imports wait in the <a href="/queue" class="text-brand-600 underline">queue</a> and run in the background, so you can keep searching.</p>
+  </div>
+
+  <form id="form" class="panel mb-5">
+    <div class="flex border-b border-ink-200" role="tablist" aria-label="Kind of document">
+      <button type="button" role="tab" data-kind="publication" class="kind-tab px-4 h-10 text-[13px] font-medium border-b-2 -mb-px">Publications</button>
+      <button type="button" role="tab" data-kind="pressrelease" class="kind-tab px-4 h-10 text-[13px] font-medium border-b-2 -mb-px">Press Releases</button>
+    </div>
+    <div class="grid grid-cols-12 gap-3 p-4 items-end">
+      <div class="col-span-12 md:col-span-4">
+        <label class="label" for="keyword">Keyword</label>
+        <div class="relative">
+          <span class="absolute left-2.5 top-2 text-ink-400"><Icon name="search" /></span>
+          <input id="keyword" name="keyword" class="field w-full pl-8" placeholder="For example inflasi, PDRB, kemiskinan" autofocus />
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-3">
+        <label class="label flex items-center gap-md" for="domain">Region<span id="located" class="normal-case tracking-normal font-normal text-ink-500 truncate"></span></label>
+        <input id="domain" name="domain" list="domains" class="field w-full" value="" placeholder="Finding your region…" autocomplete="off" />
+        <datalist id="domains"></datalist>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="year">Year</label>
+        <select id="year" name="year" class="field w-full"><option value="">All</option>{years.map((y) => <option>{y}</option>)}</select>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="month">Month</label>
+        <select id="month" name="month" class="field w-full"><option value="">All</option>{months.map((m, i) => <option value={i + 1}>{m}</option>)}</select>
+      </div>
+      <div class="col-span-4 md:col-span-1">
+        <label class="label" for="lang">Language</label>
+        <select id="lang" name="lang" class="field w-full"><option value="ind">Indonesian</option><option value="eng">English</option></select>
+      </div>
+      <div class="col-span-12 md:col-span-2 flex gap-2">
+        <button class="btn-primary flex-1"><Icon name="search" />Search</button>
+      </div>
+    </div>
+  </form>
+
+  <h2 class="sr-only">Results</h2>
+  <!-- results header: select all, count, active filters, pages -->
+  <div class="panel !bg-ink-50 flex flex-wrap items-center gap-lg px-3 min-h-10 py-1">
+    <input id="selall" type="checkbox" class="accent-brand-700" aria-label="Select all results on this page that can be imported" />
+    <span id="summary" class="text-[13px] font-semibold text-ink-900"></span>
+    <span id="chips" class="flex flex-wrap items-center gap-sm"></span>
+    <span class="flex-1"></span>
+    <div id="pager" class="flex items-center gap-1"></div>
+  </div>
+  <!-- selection: import several at once -->
+  <div id="selbar" role="toolbar" aria-label="Selected results" class="hidden sticky top-0 z-20 items-center flex-wrap gap-lg px-3 min-h-11 py-1 border border-t-0 border-brand-300 bg-brand-50 text-[12.5px]">
+    <b id="selcount" class="text-ink-900"></b><span id="selinfo" class="text-ink-600"></span>
+    <span class="flex-1"></span>
+    <label class="flex items-center gap-md text-ink-800"><input id="extract" type="checkbox" checked class="accent-brand-700" />Find tables after download</label>
+    <button id="selclear" class="btn-line btn-sm">Clear</button>
+    <button id="selgo" class="btn-primary"><Icon name="download" class="size-3.5" /><span id="selgo-l">Import to Queue</span></button>
+  </div>
+  <div id="results" class="panel border-t-0 divide-y divide-ink-200"></div>
+</Layout>
+
+<script>
+  import { api, type BpsItem, type Domain, type QueueItem } from '../lib/api';
+  import { $, $$, esc, fmtBytes, fmtDate, plural, toast, toastError } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { getSettings, saveSettings, lastSearch, rememberSearch, defaultRegion, type SearchFilters } from '../lib/settings';
+  import { me, loginUrl } from '../lib/auth';
+
+  // importing from BPS is for editors: visitors are sent to the login page
+  me().then((m) => { if (!m.user) location.replace(loginUrl()); });
+
+  // filters: the URL (a shared / reloaded search) > the last search in this browser (never its keyword) > settings
+  // back on this page without a search in the address: the last search of this tab comes back (keyword and page too)
+  const BACK = 'tdp-bps-url', PICKS = 'tdp-bps-picked';
+  if (!location.search && sessionStorage.getItem(BACK)) history.replaceState(null, '', sessionStorage.getItem(BACK)!);
+  const params = new URLSearchParams(location.search);
+  const fromUrl = ['kind', 'domain', 'year', 'month', 'lang', 'keyword'].some((k) => params.has(k));
+  const saved: SearchFilters = fromUrl ? {} : lastSearch() ?? {};
+  const get = (k: keyof SearchFilters) => (fromUrl ? params.get(k) : saved[k]) ?? '';
+  const settings = getSettings();
+  let kind = get('kind') === 'pressrelease' ? 'pressrelease' : 'publication';
+  let page = fromUrl ? +(params.get('page') ?? 1) || 1 : 1;
+  let domains: Domain[] = [];
+  const results = $('#results');
+  const f = {
+    keyword: $<HTMLInputElement>('#keyword'), domain: $<HTMLInputElement>('#domain'),
+    year: $<HTMLSelectElement>('#year'), month: $<HTMLSelectElement>('#month'), lang: $<HTMLSelectElement>('#lang'),
+  };
+  f.keyword.value = fromUrl ? params.get('keyword') ?? '' : '';
+  f.year.value = get('year');
+  f.month.value = get('month');
+  f.lang.value = get('lang') || settings.searchLang;
+  $<HTMLInputElement>('#extract').checked = settings.findTablesOnUpload;
+  let domainParam = get('domain');
+
+  function setKind(k: string) {
+    kind = k;
+    $$('.kind-tab').forEach((b) => {
+      const on = b.dataset.kind === k;
+      b.setAttribute('aria-selected', String(on));
+      b.classList.toggle('border-brand-600', on); b.classList.toggle('text-ink-900', on);
+      b.classList.toggle('border-transparent', !on); b.classList.toggle('text-ink-500', !on);
+    });
+  }
+  setKind(kind);
+
+  const domainId = () => (f.domain.value.match(/\d{4}/)?.[0]) ?? '0000';
+
+  const showDomain = () => {
+    const cur = domains.find((d) => d.id === domainParam);
+    f.domain.value = cur ? `${cur.id} · ${cur.name}` : domainParam;
+  };
+  const domainsReady = api.domains().then((ds) => {
+    domains = ds;
+    $('#domains').innerHTML = ds.map((d) => `<option value="${d.id} · ${esc(d.name)}"></option>`).join('');
+    if (domainParam) showDomain();
+  }).catch(() => { /* datalist is optional */ });
+
+  function skeleton() {
+    results.innerHTML = Array.from({ length: 5 }).map(() => `<div class="flex gap-4 p-4"><div class="skeleton w-14 h-19"></div>
+      <div class="flex-1 space-y-2"><div class="skeleton h-4 w-2/3"></div><div class="skeleton h-3 w-1/3"></div><div class="skeleton h-3 w-full"></div></div></div>`).join('');
+  }
+
+  // ------------------------------------------------------------ queue state of the results
+  let items: BpsItem[] = [];
+  /** the domain the shown results were searched in (keys of the import queue) */
+  let shownDomain = '0000';
+  const keyOf = (it: BpsItem) => `bps:${it.kind}:${shownDomain}:${it.id}`;
+  /** the selection survives a new search, another page of results and leaving the page (this tab):
+   *  key (bps:kind:domain:id) -> the result and the region it was found in */
+  const picked = new Map<string, { it: BpsItem; domain: string }>(JSON.parse(sessionStorage.getItem(PICKS) ?? '[]'));
+  const savePicks = () => sessionStorage.setItem(PICKS, JSON.stringify([...picked]));
+  const pick = (it: BpsItem, on: boolean) => { on ? picked.set(keyOf(it), { it, domain: shownDomain }) : picked.delete(keyOf(it)); savePicks(); };
+  const isPicked = (it: BpsItem) => picked.has(keyOf(it));
+  type St = { kind: 'library'; doc: string } | { kind: 'queue'; q: NonNullable<BpsItem['queue']> } | { kind: 'free' };
+  const stateOf = (it: BpsItem): St => it.document_id ? { kind: 'library', doc: it.document_id }
+    : it.queue && it.queue.status !== 'cancelled' && it.queue.status !== 'done' ? { kind: 'queue', q: it.queue } : { kind: 'free' };
+  const importable = (it: BpsItem) => stateOf(it).kind === 'free' || (it.queue?.status === 'error');
+  const mb = (s: string | null) => { const m = (s ?? '').match(/([\d.,]+)\s*(KB|MB|GB)/i); return m ? parseFloat(m[1]!.replace(',', '.')) * ({ KB: 1e3, MB: 1e6, GB: 1e9 } as Record<string, number>)[m[2]!.toUpperCase()]! : 0; };
+
+  function action(it: BpsItem) {
+    const st = stateOf(it);
+    const orig = it.pdf ? `<a href="${esc(it.pdf)}" target="_blank" rel="noopener" class="text-[12px] text-ink-700 underline hover:text-brand-700 text-center">Original PDF ↗</a>` : '';
+    if (st.kind === 'library') return `<span class="chip h-6 justify-center border-emerald-600/40 text-emerald-700 bg-surface">${icon('check', 'size-3')}In Library</span>
+      <a href="/doc?id=${st.doc}" class="btn-line btn-sm">Open in Library</a>`;
+    if (st.kind === 'queue') {
+      const q = st.q;
+      if (q.status === 'error') return `<div class="border border-red-200 bg-red-50 px-2 py-1.5 text-[11.5px] text-red-800" role="status"><b>Import failed.</b> ${esc(q.error ?? '')}</div>
+        <button data-retry="${q.id}" class="btn-line btn-sm">${icon('reset', 'size-3.5')}Retry</button>`;
+      const pct = q.total ? Math.min(100, (100 * q.done) / q.total) : 0;
+      const what = q.status === 'queued' ? `<b>Queued${q.position ? ` · #${q.position}` : ''}</b><span class="text-ink-500">${q.position && q.position > 1 ? `waiting for ${plural(q.position - 1, 'import')}` : 'next to start'}</span>`
+        : q.status === 'downloading' ? `<b>Downloading… ${Math.round(pct)}%</b><div class="h-1.5 bg-ink-100 border border-ink-200"><div class="h-full bg-brand-500" style="width:${pct}%"></div></div><span class="text-ink-500">${fmtBytes(q.done)}${q.total ? ` of ${fmtBytes(q.total)}` : ''}</span>`
+        : q.status === 'processing' ? '<b>Reading the PDF…</b>' : '<b>Finding tables…</b>';
+      return `<div class="flex flex-col gap-1 border border-ink-200 bg-ink-50 px-2 py-1.5 text-[11.5px] text-ink-800" role="status">${what}</div>
+        <a href="/queue" class="text-[12px] text-ink-700 underline hover:text-brand-700 text-center">View in Queue</a>`;
+    }
+    return `<button data-add="${esc(it.id)}" class="btn-line btn-sm">${icon('download', 'size-3.5')}Add to Queue</button>${orig}`;
+  }
+
+  /** BPS writes "-" for a value it does not have */
+  const real = (v: string | null | undefined) => !!v && v.trim() !== '-' && v.trim() !== '';
+
+  function item(it: BpsItem) {
+    const cover = it.cover
+      ? `<img src="${esc(it.cover)}" loading="lazy" alt="" class="w-full h-full object-cover" onerror="this.style.visibility='hidden'"/>`
+      : `<div class="w-full h-full grid place-items-center text-ink-300">${icon('file', 'size-6')}</div>`;
+    const on = isPicked(it);
+    const can = importable(it);
+    return `<article class="flex gap-3 p-3 ${on ? 'bg-brand-50' : 'hover:bg-ink-50/60'}" data-id="${esc(it.id)}">
+      <input type="checkbox" data-pick="${esc(it.id)}" ${on ? 'checked' : ''} ${can ? '' : 'disabled'} class="self-start mt-1 accent-brand-700"
+        aria-label="${can ? `Select ${esc(it.title)}` : `${esc(it.title)}: already in the Library or the queue`}" />
+      <div class="w-14 h-19 shrink-0 bg-ink-50 border border-ink-200 overflow-hidden">${cover}</div>
+      <div class="flex-1 min-w-0">
+        <h3 class="text-[14px] font-bold text-ink-900 leading-snug">${esc(it.title)}</h3>
+        <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-0.5 text-[11.5px] text-ink-500">
+          ${[it.kind === 'publication' ? 'Publication' : 'Press release', it.date ? `Released ${fmtDate(it.date)}` : '', real(it.size) ? esc(it.size) : '',
+            real(it.issn) ? `ISSN ${esc(it.issn)}` : '', real(it.subject) ? esc(it.subject) : ''].filter(Boolean).join('<span aria-hidden="true">·</span>')}
+        </div>
+        ${it.abstract ? `<p class="abstract mt-1.5 text-[12.5px] text-ink-700 line-clamp-2">${esc(it.abstract)}</p>
+          ${it.abstract.length > 220 ? `<button data-more class="mt-1.5 btn-line btn-sm !h-6">${icon('right', 'size-3')}Show Summary</button>` : ''}` : ''}
+      </div>
+      <div data-act class="flex flex-col items-stretch gap-md shrink-0 w-40">${action(it)}</div>
+    </article>`;
+  }
+
+  function renderResults() {
+    results.innerHTML = items.map(item).join('') ||
+      `<div class="p-10 text-center text-[13px] text-ink-600">No ${kind === 'publication' ? 'publications' : 'press releases'} match. Try another keyword, region, year or month.
+        <div class="mt-3"><button id="clearq" class="btn-line btn-sm">Clear Year and Month</button></div></div>`;
+    $('#clearq')?.addEventListener('click', () => { f.year.value = ''; f.month.value = ''; page = 1; search(); });
+    renderSel();
+  }
+
+  function renderSel() {
+    for (const it of items) if (isPicked(it) && !importable(it)) pick(it, false); // imported meanwhile
+    const sel = [...picked.values()];
+    const bar = $('#selbar');
+    bar.classList.toggle('hidden', !sel.length); bar.classList.toggle('flex', sel.length > 0);
+    $('#selcount').textContent = `${sel.length} selected`;
+    const bytes = sel.reduce((n, x) => n + mb(x.it.size), 0);
+    const here = items.filter(isPicked).length;
+    $('#selinfo').textContent = `${bytes ? `· ${fmtBytes(bytes)} in total` : ''}${here < sel.length ? ` · ${here} on this page, ${sel.length - here} from other searches or pages` : ''}`;
+    $('#selgo-l').textContent = `Import ${sel.length} to Queue`;
+    const can = items.filter(importable);
+    const all = $<HTMLInputElement>('#selall');
+    all.disabled = !can.length;
+    all.checked = can.length > 0 && can.every(isPicked);
+    all.indeterminate = !all.checked && can.some(isPicked);
+  }
+
+  // ------------------------------------------------------------ add to the queue (one or several), no navigation
+  async function enqueue(sel: { it: BpsItem; domain: string }[]) {
+    if (!sel.length) return;
+    const extract = $<HTMLInputElement>('#extract').checked;
+    saveSettings({ findTablesOnUpload: extract });
+    try {
+      const r = await api.enqueue(sel.map(({ it, domain }) => ({ kind: it.kind, id: it.id, domain, lang: f.lang.value, extract, title: it.title, cover: it.cover, size: it.size })));
+      const added: string[] = [];
+      r.results.forEach((res, i) => {
+        const { it, domain } = sel[i]!;
+        const shown = domain === shownDomain ? items.find((x) => x.kind === it.kind && x.id === it.id) : undefined; // the same result on this page
+        for (const x of [it, shown]) {
+          if (!x) continue;
+          if (res.existing) x.document_id = res.document_id;
+          else x.queue = { id: res.import.id, status: res.import.status, position: null, done: 0, total: null, error: null };
+        }
+        if (!res.existing) added.push(res.import.id);
+        picked.delete(`bps:${it.kind}:${domain}:${it.id}`);
+      });
+      savePicks();
+      const its = sel.map((x) => x.it);
+      dispatchEvent(new Event('tdp-queue'));
+      await refreshQueue();
+      if (added.length) toast(`${plural(added.length, its[0]!.kind === 'publication' ? 'publication' : 'press release')} added to the queue.`, 'info', {
+        action: { label: 'Undo', run: async () => { await api.cancelImports(added); await refreshQueue(); dispatchEvent(new Event('tdp-queue')); } },
+        action2: { label: 'View Queue', run: () => { location.href = '/queue'; } },
+      });
+    } catch (e) { toastError(e, () => enqueue(sel)); }
+  }
+
+  /** follow the imports of the shown results (local queue, not BPS) */
+  let qTimer: ReturnType<typeof setTimeout> | undefined;
+  async function refreshQueue() {
+    clearTimeout(qTimer);
+    let list: QueueItem[] = [];
+    try { list = (await api.queue({ source: 'import' })).items; } catch { return; }
+    const by = new Map<string, QueueItem>();
+    for (const q of [...list].reverse()) if (q.source_key) by.set(q.source_key, q); // newest wins
+    let active = false;
+    for (const it of items) {
+      const q = by.get(keyOf(it));
+      if (!q) continue;
+      if (q.status === 'done' && q.document_id) { it.document_id = q.document_id; it.queue = null; continue; }
+      it.queue = { id: q.id, status: q.status, position: q.position, done: q.bytes_done ?? 0, total: q.bytes_total, error: q.error };
+      if (q.group !== 'finished') active = true;
+    }
+    // update only the action column and checkbox, so a click in progress is not lost
+    for (const it of items) {
+      const el = results.querySelector<HTMLElement>(`[data-id="${CSS.escape(it.id)}"]`);
+      if (!el) continue;
+      el.querySelector('[data-act]')!.innerHTML = action(it);
+      const cb = el.querySelector<HTMLInputElement>('[data-pick]')!;
+      cb.disabled = !importable(it);
+      cb.checked = isPicked(it);
+      el.classList.toggle('bg-brand-50', cb.checked);
+    }
+    renderSel();
+    if (active && !document.hidden) qTimer = setTimeout(refreshQueue, 1500);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQueue(); });
+
+  // ------------------------------------------------------------ search
+  let lastPage = 1, pages = 1;
+  function pager(p: number, pages: number) {
+    const el = $('#pager');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML = `<span class="text-[12px] text-ink-600 px-2">Page <b>${p}</b> of ${pages}</span>
+      <button class="btn-line btn-sm" data-page="${p - 1}" ${p <= 1 ? 'disabled' : ''}>${icon('left', 'size-3.5')}Prev</button>
+      <button class="btn-line btn-sm" data-page="${p + 1}" ${p >= pages ? 'disabled' : ''}>Next${icon('right', 'size-3.5')}</button>`;
+  }
+
+  function renderChips() {
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const c: [string, string][] = [];
+    if (f.keyword.value.trim()) c.push(['keyword', `“${f.keyword.value.trim()}”`]);
+    const d = domains.find((x) => x.id === domainId());
+    c.push(['domain', d?.name ?? domainId()]);
+    if (f.year.value) c.push(['year', f.year.value]);
+    if (f.month.value) c.push(['month', months[+f.month.value]!]);
+    $('#chips').innerHTML = '<span class="text-[12px] text-ink-500">for</span>' + c.map(([k, l]) => k === 'domain'
+      ? `<span class="chip h-6 border-ink-300 bg-surface text-ink-800">${esc(l)}</span>`
+      : `<button data-unset="${k}" class="chip h-6 border-ink-400 bg-ink-100 text-ink-900 hover:border-brand-500" title="Remove this filter">${esc(l)}<span aria-hidden="true">×</span></button>`).join('');
+  }
+  $('#chips').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-unset]');
+    if (!b) return;
+    (f as any)[b.dataset.unset!].value = '';
+    page = 1; search();
+  });
+
+  const query = (pg: number) => ({ kind, domain: domainId(), keyword: f.keyword.value.trim(), year: f.year.value ? +f.year.value : '' as const,
+    month: f.month.value ? +f.month.value : '' as const, page: pg, lang: f.lang.value });
+  const syncUrl = (p: ReturnType<typeof query>) => {
+    const qs = new URLSearchParams(Object.entries(p).filter(([, v]) => v !== '').map(([key, v]) => [key, String(v)]));
+    history.replaceState(null, '', `?${qs}`);
+    sessionStorage.setItem(BACK, `${location.pathname}?${qs}`);
+  };
+
+  async function search(push = true) {
+    const p = query(page);
+    if (push) syncUrl(p);
+    else sessionStorage.setItem(BACK, location.pathname + location.search);
+    rememberSearch({ kind, domain: p.domain, year: f.year.value, month: f.month.value, lang: p.lang });
+    skeleton();
+    $('#summary').textContent = 'Searching BPS…';
+    $('#chips').innerHTML = '';
+    try {
+      const r = await api.bpsSearch(p);
+      items = r.items;
+      shownDomain = p.domain;
+      lastPage = r.page; pages = r.pages;
+      $('#summary').textContent = r.total ? `${r.total.toLocaleString('en-GB')} ${r.total === 1 ? 'result' : 'results'}` : 'No results';
+      renderChips();
+      renderResults();
+      pager(r.page, r.pages);
+      if (items.some((x) => x.queue && x.queue.status !== 'error')) refreshQueue();
+    } catch (e: any) {
+      $('#summary').textContent = '';
+      items = [];
+      results.innerHTML = `<div class="p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p>
+        <button id="retry" class="btn-primary mt-3">Retry</button></div>`;
+      $('#retry').addEventListener('click', () => search(false));
+      renderSel();
+    }
+  }
+
+  $('#form').addEventListener('submit', (e) => { e.preventDefault(); page = 1; search(); });
+  $$('.kind-tab').forEach((b) => b.addEventListener('click', () => { setKind(b.dataset.kind!); page = 1; search(); }));
+  [f.year, f.month, f.lang].forEach((s) => s.addEventListener('change', () => { page = 1; search(); }));
+  f.domain.addEventListener('change', () => { page = 1; search(); });
+  f.domain.addEventListener('focus', () => f.domain.select());
+  $('#pager').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-page]') as HTMLElement | null;
+    if (b) { page = +b.dataset.page!; search(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  });
+  results.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    const more = t.closest<HTMLElement>('[data-more]');
+    if (more) {
+      const p = more.previousElementSibling as HTMLElement;
+      const open = p.classList.toggle('line-clamp-2');
+      more.innerHTML = open ? `${icon('right', 'size-3')}Show Summary` : `${icon('chevron', 'size-3')}Hide Summary`;
+      return;
+    }
+    const add = t.closest<HTMLElement>('[data-add]');
+    if (add) { const it = items.find((x) => x.id === add.dataset.add); if (it) enqueue([{ it, domain: shownDomain }]); return; }
+    const retry = t.closest<HTMLElement>('[data-retry]');
+    if (retry) { try { await api.retryImport(retry.dataset.retry!); dispatchEvent(new Event('tdp-queue')); refreshQueue(); } catch (er) { toastError(er); } }
+  });
+  results.addEventListener('change', (e) => {
+    const c = (e.target as HTMLElement).closest<HTMLInputElement>('[data-pick]');
+    if (!c) return;
+    const it = items.find((x) => x.id === c.dataset.pick);
+    if (it) pick(it, c.checked);
+    c.closest('article')!.classList.toggle('bg-brand-50', c.checked);
+    renderSel();
+  });
+  $('#selall').addEventListener('change', () => {
+    const on = $<HTMLInputElement>('#selall').checked;
+    items.filter(importable).forEach((x) => pick(x, on));
+    renderResults();
+  });
+  $('#selclear').addEventListener('click', () => { picked.clear(); savePicks(); renderResults(); });
+  $('#selgo').addEventListener('click', () => enqueue([...picked.values()]));
+
+  // first search: wait for the default region when there is none yet (detected from where you are)
+  (async () => {
+    if (!domainParam) {
+      domainParam = await defaultRegion();
+      await domainsReady;
+      showDomain();
+      if (settings.region === 'auto') {
+        const l = JSON.parse(localStorage.getItem('tdp-located') || 'null');
+        if (l?.domain) $('#located').innerHTML = `· detected <a href="/settings" class="text-brand-600 hover:underline">(${l.source === 'location' ? 'your location' : 'internet address'})</a>`;
+      }
+    } else showDomain();
+    search(!fromUrl);
+  })();
+</script>

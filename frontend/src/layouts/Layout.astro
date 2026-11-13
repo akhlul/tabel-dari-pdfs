@@ -3,12 +3,14 @@ import '../styles/global.css';
 import Icon from '../components/Icon.astro';
 import { EARLY } from '../lib/auth';
 
-interface Props { title: string; active?: 'library' | 'search' | 'tables' | 'doc' | 'settings' | 'users' | 'login'; full?: boolean; wide?: boolean }
+interface Props { title: string; active?: 'library' | 'search' | 'tables' | 'doc' | 'queue' | 'settings' | 'users' | 'login'; full?: boolean; wide?: boolean }
 const { title, active, full = false, wide = false } = Astro.props;
+// the workspace of a document belongs to the Library
+const current = active === 'doc' ? 'library' : active;
 const nav = [
-  { id: 'library', href: '/', label: 'Library', icon: 'library' },
-  { id: 'tables', href: '/tables', label: 'Tables', icon: 'grid' },
-  { id: 'search', href: '/search', label: 'Search BPS', icon: 'search', need: 'editor' },
+  { id: 'library', href: '/', label: 'Library' },
+  { id: 'tables', href: '/tables', label: 'Tables' },
+  { id: 'search', href: '/import-from-bps', label: 'BPS Catalog', need: 'editor' },
 ];
 ---
 <!doctype html>
@@ -42,42 +44,35 @@ const nav = [
       </div>
     </div>
     <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[80] focus:bg-surface focus:text-ink-900 focus:px-3 focus:py-2 focus:border focus:border-brand-500">Skip to Content</a>
-    <header class="h-12 shrink-0 bg-header text-white flex items-center px-4 gap-6 border-b border-brand-900">
-      <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
-        <span class="grid place-items-center size-7 bg-accent-500 text-white" aria-hidden="true"><Icon name="table" class="size-4" /></span>
-        <span class="text-[15px]">Tabel dari PDF</span>
-      </a>
-      <nav class="flex h-full">
+    <!-- top bar: one navy strip, text only (no icons), like a classic enterprise webmail -->
+    <header class="topbar h-9 shrink-0 flex items-stretch text-[13px] select-none">
+      <a href="/" class="flex items-center gap-[9px] pl-3.5 pr-[18px] text-white font-bold text-[14px] tracking-[.01em]">
+        <span class="size-3.5 bg-white" aria-hidden="true"></span>Tabel dari PDF</a>
+      <nav class="flex" aria-label="Main">
         {nav.map((n) => (
-          <a href={n.href} aria-current={active === n.id ? 'page' : undefined} data-need={n.need}
-             class:list={['flex items-center gap-md px-3 h-full text-[13px] border-b-2 transition-colors',
-               active === n.id ? 'border-white text-white font-semibold' : 'border-transparent text-white/75 hover:text-white']}>
-            <Icon name={n.icon} class="size-4" />{n.label}
-          </a>
+          <a href={n.href} aria-current={current === n.id ? 'page' : undefined} data-need={n.need} class="topbar-link">{n.label}</a>
         ))}
       </nav>
-      <div class="ml-auto flex items-center gap-lg text-[12px] text-white/80">
-        <slot name="header-right" />
-        <!-- HIG: only show status when something needs attention -->
-        <span id="health" role="status" class="flex items-center gap-md"></span>
-        <a href="/settings" title="Settings (saved in this browser only)" aria-current={active === 'settings' ? 'page' : undefined}
-           class:list={['flex items-center gap-md px-2 h-8 text-[13px]', active === 'settings' ? 'text-white font-semibold' : 'text-white/75 hover:text-white']}>
-          <Icon name="settings" class="size-4" /><span class="hidden md:inline">Settings</span></a>
-        <a href="/login" id="login-link" data-need="public" class="flex items-center gap-md px-2 h-8 text-[13px] text-white/90 hover:text-white border border-white/30 hover:bg-white/10">
-          <Icon name="login" class="size-4" />Log In</a>
-        <button id="user-btn" type="button" class="hidden items-center gap-md px-2 h-8 text-[13px] text-white/90 hover:text-white hover:bg-white/10" aria-haspopup="menu">
-          <Icon name="user" class="size-4" /><span id="user-name" class="max-w-40 truncate"></span>
-          <span id="user-role" class="text-[10.5px] uppercase tracking-wider px-1 border border-white/40 text-white/80"></span></button>
-      </div>
+      <span class="flex-1"></span>
+      <span id="health" role="status" class="flex items-center gap-md px-3 text-[12px]"></span>
+      <slot name="header-right" />
+      <a href="/queue" id="queue-link" data-need="editor" aria-current={current === 'queue' ? 'page' : undefined} class="topbar-link gap-[7px]">
+        Queue<span id="queue-badge" class="topbar-badge hidden" aria-live="polite"></span></a>
+      <span class="topbar-user flex items-center pl-1.5 pr-3.5 ml-1">
+        <a href="/settings" title="Settings (saved in this browser only)" aria-current={current === 'settings' ? 'page' : undefined} class="topbar-text">Settings</a>
+        <span class="w-px h-3.5 bg-[var(--nav-sep)]" aria-hidden="true"></span>
+        <a href="/login" id="login-link" data-need="public" class="topbar-text">Log In</a>
+        <button id="user-btn" type="button" class="topbar-text hidden" aria-haspopup="menu">
+          <span id="user-name" class="max-w-48 truncate [font-variant:small-caps] tracking-[.06em] font-semibold text-white"></span></button>
+      </span>
     </header>
     <main id="main" tabindex="-1" class={full ? 'flex-1 min-h-0 flex flex-col' : wide ? 'max-w-[2000px] mx-auto px-6 py-6' : 'max-w-[1400px] mx-auto px-6 py-6'}>
       <slot />
     </main>
     <script>
       import { api } from '../lib/api';
-      import { icon } from '../lib/icons';
       import { initTooltips, contextMenu, toastError } from '../lib/ui';
-      import { me, logout, loginUrl } from '../lib/auth';
+      import { me, logout, loginUrl, canEdit } from '../lib/auth';
       initTooltips();
 
       // login state in the header
@@ -87,11 +82,10 @@ const nav = [
       me().then(({ user }) => {
         if (!user) return;
         userBtn.classList.replace('hidden', 'flex');
-        document.getElementById('user-name')!.textContent = user.name;
-        document.getElementById('user-role')!.textContent = user.role;
-        userBtn.title = `${user.username ?? user.email ?? ''} · logged in with ${user.login_method === 'google' ? 'Google' : 'a password'}`;
+        document.getElementById('user-name')!.textContent = user.name.toLowerCase();
+        userBtn.title = `${user.name} (${user.role}) · ${user.username ?? user.email ?? ''} · logged in with ${user.login_method === 'google' ? 'Google' : 'a password'}`;
         userBtn.addEventListener('click', () => contextMenu(userBtn, [
-          { heading: user.email ?? user.username ?? user.name },
+          { heading: `${user.email ?? user.username ?? user.name} · ${user.role}` },
           ...(user.role === 'admin' ? [{ label: 'Users', icon: 'users', action: () => (location.href = '/users') }] : []),
           { label: 'My Account', icon: 'lock', action: () => (location.href = '/users#me') },
           'sep',
@@ -105,15 +99,34 @@ const nav = [
         el.innerHTML = '';
         try {
           const h = await api.health();
-          if (!h.bps_key) el.innerHTML = `<span class="text-amber-400">${icon('dot', 'size-3')}</span>
-            <span title="Add WEBAPI_BPS_KEY=… to the .env file next to README.md, then restart the server">BPS search unavailable: API key missing</span>`;
+          if (!h.bps_key) el.innerHTML = `<span title="Add WEBAPI_BPS_KEY=… to the .env file next to README.md, then restart the server">BPS catalog unavailable: API key missing</span>`;
         } catch {
-          el.innerHTML = `<span class="text-red-400">${icon('x', 'size-3.5')}</span><span>Server not reachable</span>
-            <button id="hretry" class="btn btn-sm border-white/40 text-white hover:bg-white/10">Retry</button>`;
+          el.innerHTML = `<span class="font-semibold text-white">Server not reachable</span>
+            <button id="hretry" class="btn btn-sm !h-6 border-white/40 text-white hover:bg-white/10">Retry</button>`;
           document.getElementById('hretry')!.addEventListener('click', check);
         }
       }
       check();
+
+      // Queue badge: waiting and running imports / table searches (editors only); faster while something runs
+      const badge = document.getElementById('queue-badge')!;
+      let qTimer: ReturnType<typeof setTimeout> | undefined;
+      async function queueCount() {
+        clearTimeout(qTimer);
+        if (!canEdit()) return;
+        let next = 15000;
+        try {
+          const c = await api.queueCount();
+          badge.textContent = String(c.active);
+          badge.classList.toggle('hidden', !c.active);
+          document.getElementById('queue-link')!.title = c.paused ? 'The queue is paused' : c.active ? `${c.active} waiting or running` : 'Nothing waiting';
+          if (c.active) next = 4000;
+        } catch { /* the health check reports a server that is down */ }
+        if (!document.hidden) qTimer = setTimeout(queueCount, next);
+      }
+      me().then(queueCount);
+      addEventListener('tdp-queue', () => queueCount()); // something was added (BPS catalog, upload)
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) queueCount(); });
     </script>
   </body>
 </html>

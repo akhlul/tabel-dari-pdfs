@@ -2,65 +2,75 @@
 import Layout from '../layouts/Layout.astro';
 import Icon from '../components/Icon.astro';
 ---
-<Layout title="Tables" active="tables" wide>
-  <div class="flex flex-wrap items-end justify-between gap-grid mb-5">
-    <div>
-      <h1 class="text-xl font-semibold text-ink-900 tracking-tight">Tables</h1>
-      <p class="text-[13px] text-ink-600 mt-0.5">Every table in your library, with the document, page and area it comes from.</p>
-    </div>
-    <div class="toolbar">
-      <div class="relative">
-        <span class="absolute left-2.5 top-2 text-ink-400" aria-hidden="true"><Icon name="search" /></span>
-        <input id="q" type="search" aria-label="Search tables" class="field w-72 pl-8" placeholder="Search titles, notes and documents" />
-      </div>
-      <label class="flex items-center gap-md text-[12.5px] text-ink-700">Sort by:
-        <select id="sort" class="field">
-          <option value="document">Document and page</option>
-          <option value="recent">Recently changed</option>
-        </select>
-      </label>
+<Layout title="Tables" active="tables" full>
+  <!-- context bar: title, flag chips, source, validator, search -->
+  <div class="min-h-11 shrink-0 flex flex-wrap items-center gap-lg px-3 py-1 bg-ink-50 border-b border-ink-300">
+    <h1 class="text-[15px] font-semibold text-ink-900 mr-1">Tables</h1>
+    <span data-need="editor" class="text-[11.5px] text-ink-500">Status</span>
+    <div id="f-state" data-need="editor" class="flex flex-wrap gap-sm" role="group" aria-label="Status"></div>
+    <span data-need="public" class="text-[12px] text-ink-600">Only tables checked and flagged valid. <a href="/login" class="text-brand-600 underline">Log in</a> to see the others.</span>
+    <label class="flex items-center gap-md text-[11.5px] text-ink-500 ml-2">Source
+      <select id="f-kind" class="field h-7 text-[12.5px]"><option value="">All sources</option><option value="publication">Publications</option><option value="pressrelease">Press releases</option><option value="upload">Uploads</option></select></label>
+    <label data-need="editor" class="flex items-center gap-md text-[11.5px] text-ink-500">Validator
+      <select id="f-val" class="field h-7 text-[12.5px] max-w-44"><option value="">Anyone</option></select></label>
+    <span class="flex-1"></span>
+    <div class="relative">
+      <span class="absolute left-2 top-1.5 text-ink-400" aria-hidden="true"><Icon name="search" class="size-4" /></span>
+      <input id="q" type="search" aria-label="Search tables" class="field h-7 w-64 pl-7 text-[12.5px]" placeholder="Search titles, notes and documents" />
     </div>
   </div>
 
-  <div class="flex gap-grid items-start">
-    <!-- filters -->
-    <aside class="w-80 shrink-0 panel sticky top-4 max-h-[calc(100dvh-2rem)] overflow-y-auto" aria-label="Filters">
-      <fieldset data-need="editor" class="min-w-0 px-2 pt-3 pb-2">
-        <legend class="flex w-full items-center px-2 mb-1"><span class="label !mb-0">Flag</span></legend>
-        <div id="f-state"></div>
-      </fieldset>
-      <div data-need="editor" class="border-t border-ink-100 px-2 py-2" id="f-edited"></div>
-      <p data-need="public" class="px-4 pt-3 pb-2 text-[12px] text-ink-600">Only tables checked and flagged valid are shown. <a href="/login" class="text-brand-600 hover:underline">Log in</a> to see and fix the others.</p>
-      <fieldset class="min-w-0 border-t border-ink-100 px-2 pt-3 pb-2">
-        <legend class="px-2 mb-1 label !mb-1">Source type</legend>
-        <div id="f-kind"></div>
-      </fieldset>
-      <fieldset class="min-w-0 border-t border-ink-100 px-2 pt-3 pb-3">
-        <legend class="px-2 label !mb-1">Category and document</legend>
-        <input id="f-docq" type="search" aria-label="Find a document in the filter" placeholder="Find a document" class="field w-[calc(100%-1rem)] mx-2 mb-1.5 h-7 text-[12px]" />
-        <div id="f-docs" class="max-h-[28rem] overflow-y-auto"></div>
-      </fieldset>
-      <div class="border-t border-ink-100 px-4 py-2"><button id="reset" class="btn-ghost btn-sm w-full">Reset Filters</button></div>
+  <div class="flex-1 min-h-0 flex bg-surface">
+    <!-- documents, by category -->
+    <aside id="side" class="shrink-0 overflow-y-auto bg-ink-50/60" aria-label="Documents">
+      <div class="flex items-center gap-md px-2 pt-2 pb-1">
+        <span class="label !mb-0 flex-1">Documents</span>
+        <input id="f-docq" type="search" aria-label="Find a document" placeholder="Find…" class="field h-6 w-28 text-[12px] px-1.5" />
+      </div>
+      <div id="tree" role="tree" aria-label="Documents by category" class="pb-2 text-[12.5px]"></div>
     </aside>
+    <div id="split1"></div>
 
-    <!-- results -->
-    <section class="flex-1 min-w-0" aria-label="Results">
-      <div class="flex flex-wrap items-center gap-lg mb-2 min-h-9">
-        <label class="flex items-center gap-lg text-[12.5px] text-ink-700">
-          <input id="selall" type="checkbox" class="accent-brand-700" />Select all shown
-        </label>
-        <h2 id="summary" class="text-[12px] font-semibold uppercase tracking-wider text-ink-500" aria-live="polite"></h2>
-        <div id="bulk" role="toolbar" aria-label="Selected tables" class="hidden ml-auto flex flex-wrap items-center gap-sm panel px-2 py-1 border-brand-300">
-          <span id="bulkn" class="text-[12px] font-semibold text-ink-900 px-1"></span>
-          <button data-bulk="valid" data-need="editor" class="btn-ghost btn-sm"><Icon name="flagOk" class="size-3.5 text-emerald-600" />Flag as Valid</button>
-          <button data-bulk="invalid" data-need="editor" class="btn-ghost btn-sm"><Icon name="flagNo" class="size-3.5" />Flag as Not a Table</button>
-          <button data-bulk="none" data-need="editor" class="btn-ghost btn-sm">Clear Flag</button>
-          <button data-bulk="delete" data-need="editor" class="btn-ghost btn-sm"><Icon name="trash" class="size-3.5" />Delete</button>
-          <button data-bulk="restore" data-need="editor" class="btn-ghost btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
-          <span data-need="editor" class="w-px h-5 bg-ink-200 mx-0.5" role="separator"></span>
+    <!-- the table list -->
+    <section class="flex-1 min-w-0 flex flex-col" aria-label="Tables">
+      <div class="flex-1 min-h-0 overflow-auto" id="scroll">
+        <table id="tbl" class="w-full text-[12.5px] border-collapse table-fixed" aria-labelledby="summary">
+          <colgroup><col class="w-9" /><col class="w-[70px]" data-col="thumb" /><col /><col class="w-32" data-col="status" /><col class="w-36" data-need="editor" data-col="vby" /><col class="w-28" data-need="editor" data-col="von" /><col class="w-16" data-col="page" /></colgroup>
+          <thead class="sticky top-0 z-10"><tr class="bg-ink-100 text-left text-[11.5px] font-semibold text-ink-700 border-b border-ink-300 h-8">
+            <th class="px-2 border-r border-ink-200"><input id="selall" type="checkbox" class="accent-brand-700 align-middle" aria-label="Select all shown" /></th>
+            <th class="px-2 border-r border-ink-200" data-col="thumb">Thumb</th>
+            <th class="px-2 border-r border-ink-200" aria-sort="none" data-sorth="document"><button data-sort="document" class="hover:underline">Table Title &amp; Metadata</button></th>
+            <th class="px-2 border-r border-ink-200" data-col="status">Status</th>
+            <th class="px-2 border-r border-ink-200" data-need="editor" data-col="vby">Validated by</th>
+            <th class="px-2 border-r border-ink-200" data-need="editor" data-col="von" aria-sort="none" data-sorth="validated"><button data-sort="validated" class="hover:underline">Validated on</button></th>
+            <th class="px-2 text-right" data-col="page">Page</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="py-4 text-center"><button id="more" class="btn-line btn-sm hidden">Load More</button></div>
+      </div>
+      <!-- footer: counts and bulk actions -->
+      <div class="h-9 shrink-0 flex items-center gap-lg px-3 border-t border-ink-300 bg-ink-50 text-[12px] text-ink-700" role="toolbar" aria-label="Selected tables">
+        <span id="summary" aria-live="polite"></span>
+        <span class="flex-1"></span>
+        <button id="cols" class="btn-ghost btn-sm" title="Show or hide columns (also: right-click the column headers)" aria-haspopup="menu">Columns<svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <label class="flex items-center gap-md text-ink-600">Sort
+          <select id="sort" class="field h-6 text-[12px] px-1"><option value="document">Document and page</option><option value="recent">Recently changed</option><option value="validated" data-need="editor">Recently validated</option></select></label>
+        <div id="bulk" class="hidden items-center gap-md">
+          <div class="relative" data-menu data-need="editor">
+            <button class="btn-line btn-sm" data-menu-toggle>Flag<Icon name="chevron" class="size-3" /></button>
+            <div class="menu hidden right-0 bottom-full mb-1 w-56">
+              <button data-bulk="valid" class="menu-item"><Icon name="flagOk" class="size-4 text-emerald-600" />Flag as Valid</button>
+              <button data-bulk="invalid" class="menu-item"><Icon name="flagNo" class="size-4 text-ink-500" />Flag as Not a Table</button>
+              <button data-bulk="none" class="menu-item"><Icon name="dot" class="size-4 text-ink-400" />Clear Flag</button>
+              <div class="border-t border-ink-100 my-1"></div>
+              <button data-bulk="delete" class="menu-item !text-red-700"><Icon name="trash" class="size-4" />Delete</button>
+              <button data-bulk="restore" class="menu-item"><Icon name="restore" class="size-4 text-ink-500" />Restore</button>
+            </div>
+          </div>
           <div class="relative" data-menu>
             <button class="btn-primary btn-sm" data-menu-toggle><Icon name="download" class="size-3.5" />Export<Icon name="chevron" class="size-3" /></button>
-            <div class="menu hidden right-0 w-72">
+            <div class="menu hidden right-0 bottom-full mb-1 w-72">
               <button data-export="xlsx" class="menu-item">Excel Workbook (.xlsx)<span class="ml-auto text-[11px] text-ink-500">one sheet per table</span></button>
               <button data-export="zip" class="menu-item">CSV Files (.zip)</button>
               <button data-export="json" class="menu-item">JSON</button>
@@ -68,58 +78,71 @@ import Icon from '../components/Icon.astro';
                 <input id="ex-title" type="checkbox" class="accent-brand-700" />Write the title above each table (Excel)</label>
             </div>
           </div>
+          <button id="selclear" class="btn-ghost btn-sm">Clear</button>
         </div>
       </div>
-      <div id="list" role="list" class="flex flex-col gap-lg"></div>
-      <div class="py-5 text-center"><button id="more" class="btn-line hidden">Load More</button></div>
     </section>
+    <div id="split2"></div>
 
-    <!-- preview (list-detail; HIG: details inline, not in a dialog). Below xl it opens as a side drawer. -->
-    <aside id="preview" aria-label="Table preview"
-      class="hidden xl:flex xl:sticky xl:top-4 xl:w-[30rem] shrink-0 flex-col panel max-h-[calc(100dvh-2rem)]
-             max-xl:fixed max-xl:inset-y-0 max-xl:right-0 max-xl:z-40 max-xl:w-[min(34rem,94vw)] max-xl:shadow-2xl max-xl:max-h-none"></aside>
+    <!-- preview -->
+    <aside id="preview" aria-label="Table preview" class="shrink-0 flex flex-col bg-ink-100 min-w-0"></aside>
   </div>
 </Layout>
+
+<style is:global>
+  /* columns hidden by the user (Columns menu) */
+  #tbl[data-hide~="thumb"] [data-col="thumb"], #tbl[data-hide~="status"] [data-col="status"], #tbl[data-hide~="vby"] [data-col="vby"],
+  #tbl[data-hide~="von"] [data-col="von"], #tbl[data-hide~="page"] [data-col="page"] { display: none; }
+</style>
 
 <script>
   import { api, ENGINE_NAME, type State, type Table, type TableSearch } from '../lib/api';
   import { tableHTML } from '../lib/editor';
-  import { $, $$, esc, toast, toastError, plural, initMenus, KIND_LABEL, debounce, ago, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
+  import { $, $$, esc, toast, toastError, plural, initMenus, KIND_LABEL, debounce, ago, fmtDate, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
   import { icon } from '../lib/icons';
-  import { UNCAT, catLabel, pathKey } from '../lib/categories';
+  import { UNCAT, buildTree, catLabel, pathKey, type CatNode } from '../lib/categories';
   import { getSettings } from '../lib/settings';
   import { canEdit, me } from '../lib/auth';
+  import { splitter } from '../lib/split';
 
   initMenus();
+  splitter($('#split1'), $('#side'), { key: 'tables-side', side: 'left', min: 180, max: 460, def: 250, label: 'Resize the document list' });
+  splitter($('#split2'), $('#preview'), { key: 'tables-preview', side: 'right', min: 300, max: 900, def: 420, label: 'Resize the preview' });
   const settings = getSettings();
   $<HTMLInputElement>('#ex-title').checked = settings.exportTitle;
   const STATE_LABEL: Record<State, string> = { none: 'Unflagged', valid: 'Valid', invalid: 'Not a table', deleted: 'Deleted' };
-  const STATES: State[] = ['valid', 'none', 'invalid', 'deleted'];
-  const stateIcon = (s: State) =>
-    s === 'valid' ? `<span class="text-emerald-600 shrink-0">${icon('flagOk', 'size-4')}</span>`
-    : s === 'invalid' ? `<span class="text-ink-400 shrink-0">${icon('flagNo', 'size-4')}</span>`
-    : s === 'deleted' ? `<span class="text-red-600 shrink-0">${icon('trash', 'size-4')}</span>`
-    : `<span class="text-ink-300 shrink-0">${icon('dot', 'size-4')}</span>`;
-  const stateBadge = (s: State) => `<span class="chip ${s === 'valid' ? 'border-emerald-600/40 text-emerald-700' : s === 'deleted' ? 'border-red-200 text-red-700' : 'border-ink-200 text-ink-600'}">${stateIcon(s).replace('size-4', 'size-3')}${STATE_LABEL[s]}</span>`;
+  const STATES: State[] = ['none', 'valid', 'invalid', 'deleted'];
+  const stateIcon = (s: State, size = 'size-3.5') =>
+    s === 'valid' ? `<span class="text-emerald-600 shrink-0">${icon('flagOk', size)}</span>`
+    : s === 'invalid' ? `<span class="text-ink-500 shrink-0">${icon('flagNo', size)}</span>`
+    : s === 'deleted' ? `<span class="text-red-600 shrink-0">${icon('trash', size)}</span>`
+    : `<span class="text-ink-300 shrink-0">${icon('dot', size)}</span>`;
+  const stateBadge = (s: State) => s === 'none' ? '<span class="text-ink-400">—</span>'
+    : `<span class="chip h-[22px] ${s === 'valid' ? 'border-emerald-600/40 text-emerald-700' : s === 'deleted' ? 'border-red-200 text-red-700' : 'border-ink-300 text-ink-600'} bg-surface">${stateIcon(s, 'size-3')}${STATE_LABEL[s]}</span>`;
 
   // ---------------------------------------------------------------- state (mirrored in the URL)
   const p = new URLSearchParams(location.search);
   const f = {
-    state: (p.get('state') ?? 'valid').split(',').filter(Boolean) as State[],
+    state: (p.get('state') ?? 'none,valid,invalid').split(',').filter(Boolean) as State[],
     edited: p.get('edited') === '1',
     kinds: (p.get('kinds') ?? '').split(',').filter(Boolean),
     docs: (p.get('docs') ?? '').split(',').filter(Boolean),
+    validator: p.get('validator') ?? '',
     q: p.get('q') ?? '',
     sort: p.get('sort') ?? 'document',
   };
+  /** the tree node shown as selected: 'all', a category key, or 'doc:<id>' */
+  let node = p.get('node') ?? (f.docs.length === 1 ? `doc:${f.docs[0]}` : 'all');
   $<HTMLInputElement>('#q').value = f.q;
   $<HTMLSelectElement>('#sort').value = f.sort;
+  $<HTMLSelectElement>('#f-kind').value = f.kinds.length === 1 ? f.kinds[0]! : '';
 
   let items: Table[] = [];
   let total = 0;
   let last: TableSearch | null = null;
   let current: string | null = p.get('table');
   const picked = new Set<string>();
+  const openCats = new Set<string>(JSON.parse(localStorage.getItem('tables-open') ?? '[]'));
 
   function syncUrl() {
     const u = new URLSearchParams();
@@ -127,6 +150,8 @@ import Icon from '../components/Icon.astro';
     if (f.edited) u.set('edited', '1');
     if (f.kinds.length) u.set('kinds', f.kinds.join(','));
     if (f.docs.length) u.set('docs', f.docs.join(','));
+    if (node !== 'all' && !node.startsWith('doc:')) u.set('node', node);
+    if (f.validator) u.set('validator', f.validator);
     if (f.q) u.set('q', f.q);
     if (f.sort !== 'document') u.set('sort', f.sort);
     if (current) u.set('table', current);
@@ -135,155 +160,192 @@ import Icon from '../components/Icon.astro';
 
   async function load(append = false) {
     syncUrl();
-    if (!append) $('#list').innerHTML = skeleton();
+    if (!append) $('#rows').innerHTML = skeleton();
     try {
       const r = await api.searchTables({
-        state: f.state.join(',') || 'none,valid,invalid,deleted', edited: f.edited ? true : '', docs: f.docs.join(','),
-        kinds: f.kinds.join(','), q: f.q, sort: f.sort, offset: append ? items.length : 0, limit: 20,
+        state: (canEdit() ? f.state.join(',') : 'valid') || 'none,valid,invalid,deleted', edited: f.edited ? true : '', docs: f.docs.join(','),
+        kinds: f.kinds.join(','), validator: f.validator, q: f.q, sort: f.sort, offset: append ? items.length : 0, limit: 100,
       });
       last = r;
       total = r.total;
       items = append ? [...items, ...r.items] : r.items;
       renderFacets(r);
-      renderList();
-      if (current && !append) renderPreview();
+      renderRows();
+      if (!append) renderPreview();
     } catch (e: any) {
-      $('#list').innerHTML = `<div class="panel p-8 text-center text-[13px]"><p class="text-red-700">${esc(e.message)}</p><button id="retry" class="btn-primary mt-3">Retry</button></div>`;
+      $('#rows').innerHTML = `<tr><td colspan="7" class="p-8 text-center"><p class="text-red-700">${esc(e.message)}</p><button id="retry" class="btn-primary mt-3">Retry</button></td></tr>`;
       $('#retry').addEventListener('click', () => load());
     }
   }
 
-  const skeleton = () => Array.from({ length: 3 }).map(() =>
-    `<div class="panel p-3 flex gap-grid"><div class="skeleton w-40 h-28"></div><div class="flex-1 space-y-2"><div class="skeleton h-4 w-2/3"></div><div class="skeleton h-3 w-1/3"></div></div></div>`).join('');
+  const skeleton = () => Array.from({ length: 8 }).map(() =>
+    `<tr class="border-b border-ink-100 h-[46px]"><td></td><td><div class="skeleton w-11 h-8 mx-2"></div></td><td colspan="5"><div class="skeleton h-3.5 w-1/2"></div></td></tr>`).join('');
 
-  function check(name: string, value: string, on: boolean, label: string, count: number, lead = '') {
-    return `<label class="flex items-center gap-lg px-2 ${name === 'doc' ? 'min-h-8 py-0.5 pl-6' : 'h-8'} text-[13px] hover:bg-ink-50 ${count || on ? 'text-ink-800' : 'text-ink-500'}">
-      <input type="checkbox" data-${name}="${esc(value)}" ${on ? 'checked' : ''} class="accent-brand-700" />${lead}
-      <span class="flex-1 min-w-0 ${name === 'doc' ? 'line-clamp-2 leading-tight py-0.5' : 'truncate'}" title="${esc(label)}">${esc(label)}</span>
-      <span class="text-[11px] tabular-nums text-ink-500" aria-label="${count} tables">${count}</span></label>`;
-  }
-
+  // ---------------------------------------------------------------- facets: flag chips, validator, document tree
   function renderFacets(r: TableSearch) {
-    $('#f-state').innerHTML = STATES.map((s) => check('state', s, f.state.includes(s), STATE_LABEL[s], r.facets.state[s] ?? 0, stateIcon(s))).join('');
-    $('#f-edited').innerHTML = check('edited', '1', f.edited, 'Edited only', r.facets.edited, `<span class="text-accent-600">${icon('edit', 'size-3.5')}</span>`);
-    const kinds = ['publication', 'pressrelease', 'upload'];
-    $('#f-kind').innerHTML = kinds.map((k) => check('kind', k, f.kinds.includes(k), KIND_LABEL[k]!, r.facets.kinds[k] ?? 0)).join('');
-    renderDocFacet(r);
+    $('#f-state').innerHTML = STATES.map((s) => {
+      const on = f.state.includes(s);
+      return `<button data-state="${s}" aria-pressed="${on}" class="chip h-6 px-2 text-[11.5px] ${on ? 'bg-brand-700 border-brand-700 text-white' : 'bg-surface border-ink-300 text-ink-700 hover:border-ink-500'}">
+        ${stateIcon(s, 'size-3').replace(/text-\w+-\d+ /, on ? '' : '$&')}${STATE_LABEL[s]} <span class="tabular-nums ${on ? '' : 'text-ink-500'}">${(r.facets.state[s] ?? 0).toLocaleString('id')}</span></button>`;
+    }).join('') + `<button data-edited aria-pressed="${f.edited}" class="chip h-6 px-2 text-[11.5px] ${f.edited ? 'bg-orange-50 border-accent-600 text-accent-600 font-semibold' : 'bg-surface border-ink-300 text-ink-700 hover:border-ink-500'}">${icon('edit', 'size-3')}Edited <span class="tabular-nums">${r.facets.edited}</span></button>`;
+    const val = $<HTMLSelectElement>('#f-val');
+    val.innerHTML = '<option value="">Anyone</option>' + r.facets.validators.map((v) => `<option value="${esc(v.id)}">${esc(v.name)} (${v.count})</option>`).join('')
+      + (f.validator && !r.facets.validators.some((v) => v.id === f.validator) ? `<option value="${esc(f.validator)}">(selected)</option>` : '');
+    val.value = f.validator;
+    renderTree(r);
   }
 
-  /** documents grouped by category (full path); a group checkbox selects every document in it */
-  function renderDocFacet(r: TableSearch) {
+  /** documents in a category tree; a category selects all its documents */
+  function renderTree(r: TableSearch) {
     const dq = $<HTMLInputElement>('#f-docq').value.trim().toLowerCase();
     const docs = r.facets.docs.filter((d) => !dq || d.title.toLowerCase().includes(dq) || catLabel(d.category ?? []).toLowerCase().includes(dq));
-    const groups = new Map<string, typeof docs>();
-    for (const d of docs) { const k = pathKey(d.category ?? []); groups.set(k, [...(groups.get(k) ?? []), d]); }
-    const keys = [...groups.keys()].sort((a, b) => {
-      const pa = JSON.parse(a) as string[], pb = JSON.parse(b) as string[];
-      return Number(!pa.length) - Number(!pb.length) || catLabel(pa).localeCompare(catLabel(pb), 'id');
-    });
-    $('#f-docs').innerHTML = keys.map((k) => {
-      const path = JSON.parse(k) as string[];
-      const ds = groups.get(k)!;
-      const n = ds.filter((d) => f.docs.includes(d.id)).length;
-      const total = ds.reduce((a, d) => a + d.count, 0);
-      return `<div role="group" aria-label="${esc(catLabel(path))}">
-        <label class="flex items-start gap-lg px-2 pt-1.5 pb-0.5 text-[11.5px] font-semibold text-ink-600 hover:bg-ink-50" title="${esc(catLabel(path))}">
-          <input type="checkbox" data-docgroup="${esc(ds.map((d) => d.id).join(','))}" ${n && n === ds.length ? 'checked' : ''} ${n && n < ds.length ? 'data-mixed="1"' : ''} class="accent-brand-700 mt-0.5" />
-          ${icon(path.length ? 'folder' : 'inbox', 'size-3.5 text-ink-400 mt-0.5')}
-          <span class="flex-1 min-w-0 leading-tight">${path.length ? path.map(esc).join('<span class="text-ink-300"> / </span>') : UNCAT}</span>
-          <span class="text-[11px] font-normal tabular-nums text-ink-500">${total}</span></label>
-        ${ds.map((d) => check('doc', d.id, f.docs.includes(d.id), d.title, d.count)).join('')}</div>`;
-    }).join('') || `<div class="px-2 py-2 text-[12px] text-ink-500">${dq ? 'No document matches.' : 'No documents yet.'}</div>`;
-    $$<HTMLInputElement>('[data-mixed]', $('#f-docs')).forEach((i) => (i.indeterminate = true));
+    const root: CatNode = buildTree(docs.map((d) => ({ category: d.category ?? [] })));
+    const byCat = new Map<string, typeof docs>();
+    for (const d of docs) { const k = pathKey(d.category ?? []); byCat.set(k, [...(byCat.get(k) ?? []), d]); }
+    const under = (path: string[]) => docs.filter((d) => path.every((x, i) => (d.category ?? [])[i] === x));
+    const sum = (ds: typeof docs) => ds.reduce((a, d) => a + d.count, 0);
+    const item = (key: string, depth: number, label: string, n: number, ic: string, kids: boolean, isOpen: boolean, title = label) => {
+      const on = node === key;
+      return `<div role="treeitem" aria-level="${depth + 1}" aria-selected="${on}" ${kids ? `aria-expanded="${isOpen}"` : ''} data-node="${esc(key)}" tabindex="${on ? 0 : -1}" title="${esc(title)}"
+        class="flex items-center gap-sm h-6 pr-2 select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 ${on ? 'bg-brand-100 font-semibold text-ink-900' : 'text-ink-800 hover:bg-ink-100'}" style="padding-left:${4 + depth * 14}px">
+        <span data-toggle="${esc(key)}" class="w-4 grid place-items-center text-ink-500 text-[9px] ${kids ? '' : 'invisible'}" aria-hidden="true">${isOpen ? '▼' : '▶'}</span>
+        ${icon(ic, `size-3.5 shrink-0 ${on ? 'text-brand-600' : 'text-ink-400'}`)}
+        <span class="flex-1 min-w-0 truncate">${esc(label)}</span><span class="count-badge">${n}</span></div>`;
+    };
+    const walk = (n: CatNode, depth: number): string => n.children.map((c) => {
+      const key = pathKey(c.path);
+      const isOpen = openCats.has(key) || !!dq;
+      const own = byCat.get(key) ?? [];
+      let h = item(key, depth, c.name, sum(under(c.path)), isOpen ? 'folderOpen' : 'folder', true, isOpen, catLabel(c.path));
+      if (isOpen) h += `<div role="group">${walk(c, depth + 1)}${own.map((d) => item(`doc:${d.id}`, depth + 1, d.title, d.count, 'file', false, false)).join('')}</div>`;
+      return h;
+    }).join('');
+    const uncat = byCat.get('[]') ?? [];
+    const uOpen = openCats.has('uncat') || !!dq;
+    $('#tree').innerHTML = item('all', 0, 'All documents', sum(docs), 'library', false, false)
+      + walk(root, 0)
+      + (uncat.length ? item('uncat', 0, UNCAT, sum(uncat), 'inbox', true, uOpen)
+        + (uOpen ? `<div role="group">${uncat.map((d) => item(`doc:${d.id}`, 1, d.title, d.count, 'file', false, false)).join('')}</div>` : '') : '')
+      || `<div class="px-3 py-2 text-ink-500">${dq ? 'No document matches.' : 'No documents yet.'}</div>`;
+    if (!$('#tree').querySelector('[tabindex="0"]')) $('#tree').querySelector<HTMLElement>('[role=treeitem]')?.setAttribute('tabindex', '0');
   }
-  $('#f-docq').addEventListener('input', debounce(() => last && renderDocFacet(last), 120));
 
+  function selectNode(key: string) {
+    node = key;
+    if (key === 'all') f.docs = [];
+    else if (key.startsWith('doc:')) f.docs = [key.slice(4)];
+    else {
+      const path = key === 'uncat' ? [] : (JSON.parse(key) as string[]);
+      const ds = last?.facets.docs.filter((d) => key === 'uncat' ? !(d.category ?? []).length : path.every((x, i) => (d.category ?? [])[i] === x)) ?? [];
+      f.docs = ds.map((d) => d.id);
+      if (!f.docs.length) f.docs = ['-'];
+    }
+    picked.clear();
+    load().then(() => $<HTMLElement>(`#tree [data-node="${CSS.escape(key)}"]`)?.focus());
+  }
+  $('#tree').addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const tg = t.closest<HTMLElement>('[data-toggle]');
+    if (tg && !tg.classList.contains('invisible')) {
+      const k = tg.dataset.toggle!;
+      openCats.has(k) ? openCats.delete(k) : openCats.add(k);
+      localStorage.setItem('tables-open', JSON.stringify([...openCats]));
+      if (last) renderTree(last);
+      return;
+    }
+    const n = t.closest<HTMLElement>('[data-node]');
+    if (n) selectNode(n.dataset.node!);
+  });
+  $('#tree').addEventListener('keydown', (e) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
+    if (!n) return;
+    const all = $$<HTMLElement>('[role=treeitem]', $('#tree'));
+    const i = all.indexOf(n);
+    const go = (j: number) => { e.preventDefault(); const x = all[Math.max(0, Math.min(all.length - 1, j))]; if (x) { all.forEach((y) => (y.tabIndex = -1)); x.tabIndex = 0; x.focus(); } };
+    const k = n.dataset.node!;
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNode(k); }
+    else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && n.hasAttribute('aria-expanded')) {
+      e.preventDefault();
+      e.key === 'ArrowRight' ? openCats.add(k) : openCats.delete(k);
+      localStorage.setItem('tables-open', JSON.stringify([...openCats]));
+      if (last) renderTree(last);
+      $<HTMLElement>(`#tree [data-node="${CSS.escape(k)}"]`)?.focus();
+    }
+  });
+  $('#f-docq').addEventListener('input', debounce(() => last && renderTree(last), 120));
+
+  // ---------------------------------------------------------------- the table list (dense rows)
   const pagesOf = (t: Table) => t.pages ?? [t.page];
-  const pageText = (t: Table) => { const ps = pagesOf(t); return ps.length > 1 ? `pages ${ps[0]}–${ps.at(-1)}` : `page ${t.page}`; };
-  function areaText(t: Table) {
-    const [pw, ph] = t.document!.page_size;
-    const [x0, y0, x1, y1] = t.bbox;
-    if (x1 - x0 <= 0) return 'added by hand, no area on the PDF';
-    const pct = (v: number, m: number) => Math.round((100 * v) / m);
-    return `${pct(y0, ph)}–${pct(y1, ph)}% down the page, ${pct(x0, pw)}–${pct(x1, pw)}% across`;
-  }
+  const pageText = (t: Table) => { const ps = pagesOf(t); return ps.length > 1 ? `${ps[0]}–${ps.at(-1)}` : String(t.page); };
+  const when = (ts: number) => { const d = new Date(ts * 1000); return { day: fmtDate(ts), time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }; };
 
-  function card(t: Table) {
+  function row(t: Table) {
     const s = t.state!;
     const d = t.document!;
     const w = Math.max(0, ...t.rows.map((r) => r.length));
     const hasBox = t.bbox[2] - t.bbox[0] > 0;
     const isCur = t.id === current;
-    return `<div role="listitem" data-card="${t.id}" class="panel flex ${isCur ? '!border-brand-600 shadow-[inset_3px_0_0_var(--color-brand-600)]' : picked.has(t.id) ? '!border-brand-300' : ''}">
-      <label class="w-9 shrink-0 flex justify-center pt-3.5 border-r border-ink-100" title="Select for bulk actions">
-        <input type="checkbox" data-pick="${t.id}" ${picked.has(t.id) ? 'checked' : ''} class="accent-brand-700" aria-label="Select ${esc(t.title || 'untitled table')}" /></label>
-      <div class="w-40 shrink-0 bg-ink-50 border-r border-ink-100 p-1.5 grid place-items-center overflow-hidden" aria-hidden="true">
-        ${hasBox ? `<img src="${api.snapshotUrl(t.id, t.bbox, 1)}" loading="lazy" alt="" class="max-h-32 max-w-full object-contain bg-[#fff]" />` : `<span class="text-ink-300">${icon('table', 'size-7')}</span>`}
-      </div>
-      <div class="flex-1 min-w-0 p-3 flex flex-col gap-sm">
-        <div class="flex items-start gap-lg">
-          <h3 class="flex-1 min-w-0 text-[13.5px] leading-snug ${isCur ? 'font-semibold' : 'font-medium'} ${t.title ? 'text-ink-900' : 'text-ink-500 italic'} ${s === 'deleted' ? 'line-through' : ''}">
-            <button data-open="${t.id}" class="text-left hover:text-brand-700 line-clamp-2" aria-describedby="src-${t.id}">${esc(t.title || 'Untitled table')}</button></h3>
-          <button data-menu-for="${t.id}" class="btn-ghost btn-sm btn-icon -mr-1 -mt-1 shrink-0" title="Actions for this table (Menu key)">${icon('layers', 'size-4')}</button>
-        </div>
-        ${t.notes ? `<p class="text-[12px] text-ink-600 line-clamp-1">${esc(t.notes.split('\n')[0])}</p>` : ''}
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-600 mt-auto" id="src-${t.id}">
-          ${stateBadge(s)}
-          ${t.edited ? `<span class="chip border-accent-400/60 text-accent-600 bg-orange-50">${icon('edit', 'size-3')}edited</span>` : ''}
-          <span class="tabular-nums">${t.rows.length} × ${w}</span>
-          <span class="min-w-0 truncate max-w-80">${esc(KIND_LABEL[d.kind] ?? d.kind)} · ${esc(d.title)}</span>
-          <span class="tabular-nums font-medium text-ink-800">${pageText(t)}</span>
-          <a href="/doc?id=${d.id}&table=${t.id}" class="ml-auto btn-line btn-sm">${icon('target', 'size-3.5')}Open in PDF</a>
-        </div>
-      </div>
-    </div>`;
+    const on = picked.has(t.id);
+    const v = t.validated_at ? when(t.validated_at) : null;
+    return `<tr data-row="${t.id}" class="border-b border-ink-100 h-[46px] py-1 ${isCur ? 'bg-brand-100' : on ? 'bg-brand-50' : 'hover:bg-ink-50'}">
+      <td class="px-2"><input type="checkbox" data-pick="${t.id}" ${on ? 'checked' : ''} class="accent-brand-700 align-middle" aria-label="Select ${esc(t.title || 'untitled table')}" /></td>
+      <td class="px-2" data-col="thumb"><div class="w-[50px] h-[34px] bg-surface border border-ink-200 grid place-items-center overflow-hidden" aria-hidden="true">
+        ${hasBox ? `<img src="${api.snapshotUrl(t.id, t.bbox, 0.5)}" loading="lazy" alt="" class="max-w-full max-h-full object-contain" />` : `<span class="text-ink-300">${icon('table', 'size-4')}</span>`}</div></td>
+      <td class="px-2 py-1 min-w-0">
+        <button data-open="${t.id}" class="block w-full text-left leading-snug py-0.5 ${isCur ? 'font-bold' : 'font-medium'} ${t.title ? 'text-ink-900' : 'text-ink-500 italic'} ${s === 'deleted' ? 'line-through' : ''} hover:underline focus:outline-none focus-visible:underline">${esc(t.title || 'Untitled table')}</button>
+        <div class="text-[11px] text-ink-500 truncate">${esc(d.title)} · ${w} col × ${t.rows.length} rows${t.edited ? ' · <span class="text-accent-600 font-medium">edited</span>' : ''}</div></td>
+      <td class="px-2" data-col="status">${stateBadge(s)}</td>
+      <td class="px-2 truncate" data-need="editor" data-col="vby">${t.validated_by_name ? `<span class="font-medium text-ink-800" title="${esc(t.validated_by_name)}">${esc(t.validated_by_name)}</span>` : s !== 'none' && s !== 'deleted' ? '<span class="text-ink-400" title="Flagged before validators were recorded">Not recorded</span>' : '<span class="text-ink-400">—</span>'}</td>
+      <td class="px-2 tabular-nums" data-need="editor" data-col="von">${v ? `<div class="text-ink-800 leading-tight">${v.day}</div><div class="text-[11px] text-ink-500 leading-tight">${v.time}</div>` : '<span class="text-ink-400">—</span>'}</td>
+      <td class="px-2 text-right tabular-nums text-ink-800" data-col="page">${pageText(t)}</td></tr>`;
   }
 
-  function renderList() {
-    $('#summary').textContent = total ? plural(total, 'table') : '';
-    $('#list').innerHTML = items.map(card).join('') || emptyState();
+  function renderRows() {
+    $('#summary').textContent = `${picked.size ? `${picked.size} selected · ` : ''}${plural(total, 'table')}${items.length < total ? ` (${items.length} shown)` : ''}`;
+    $('#rows').innerHTML = items.map(row).join('') || `<tr><td colspan="7">${emptyState()}</td></tr>`;
     $('#more').classList.toggle('hidden', items.length >= total);
     $('#more').textContent = `Load More (${total - items.length} left)`;
+    $$<HTMLElement>('[data-sorth]').forEach((th) => th.setAttribute('aria-sort', th.dataset.sorth === f.sort ? (f.sort === 'document' ? 'ascending' : 'descending') : 'none'));
     renderBulk();
   }
 
   function emptyState() {
     const onlyValid = f.state.length === 1 && f.state[0] === 'valid';
     const unflagged = last?.facets.state.none ?? 0;
-    return `<div class="panel px-6 py-14 text-center">
+    return `<div class="px-6 py-14 text-center">
       <div class="mx-auto grid place-items-center size-12 bg-ink-50 border border-ink-200 text-ink-400 mb-3" aria-hidden="true">${icon('grid', 'size-6')}</div>
       <h2 class="font-medium text-ink-900">${onlyValid ? 'No valid tables yet' : 'No tables match the filters'}</h2>
       <p class="text-[13px] text-ink-600 mt-1 mb-4">${onlyValid
         ? !canEdit() ? 'No table has been checked and flagged valid yet.' : `Tables show up here after you flag them as valid.${unflagged ? ` ${plural(unflagged, 'table is', 'tables are')} waiting for a flag.` : ''}`
-        : 'Try other flags, source types or documents.'}</p>
+        : 'Try other flags, sources, validators or documents.'}</p>
       ${onlyValid && unflagged && canEdit() ? '<button data-empty="unflagged" class="btn-primary">Review Unflagged Tables</button>' : '<button data-empty="reset" class="btn-line">Reset Filters</button>'}
     </div>`;
   }
 
   function renderBulk() {
     $('#bulk').classList.toggle('hidden', !picked.size);
-    $('#bulkn').textContent = `${picked.size} selected`;
+    $('#bulk').classList.toggle('flex', picked.size > 0);
     const all = items.length > 0 && items.every((t) => picked.has(t.id));
     $<HTMLInputElement>('#selall').checked = all;
     $<HTMLInputElement>('#selall').indeterminate = !all && items.some((t) => picked.has(t.id));
   }
 
-  // ---------------------------------------------------------------- preview pane (list-detail)
+  // ---------------------------------------------------------------- preview pane
   async function openPreview(id: string) {
     current = id;
     syncUrl();
-    renderList();
+    renderRows();
     await renderPreview();
-    if (!matchMedia('(min-width: 1280px)').matches) $('#preview').querySelector<HTMLElement>('[data-close]')?.focus();
   }
 
   async function renderPreview() {
     const pane = $('#preview');
     if (!current) {
-      pane.innerHTML = `<div class="flex-1 grid place-items-center text-center p-8 text-[13px] text-ink-600">
-        <div><div class="mx-auto grid place-items-center size-10 bg-ink-50 border border-ink-200 text-ink-400 mb-2" aria-hidden="true">${icon('table', 'size-5')}</div>
-        Choose a table to see it next to its area on the PDF.</div></div>`;
-      pane.classList.remove('max-xl:flex');
+      pane.innerHTML = `<div class="h-9 shrink-0 border-b border-ink-300 bg-ink-50"></div><div class="flex-1 grid place-items-center text-center p-8 text-[13px] text-ink-600">
+        <div><div class="mx-auto grid place-items-center size-10 bg-surface border border-ink-200 text-ink-400 mb-2" aria-hidden="true">${icon('table', 'size-5')}</div>
+        Choose a table to see its area on the PDF<br />next to the extracted cells.</div></div>`;
       return;
     }
     let t: Table;
@@ -291,36 +353,35 @@ import Icon from '../components/Icon.astro';
     const d = t.document!;
     const s = t.state!;
     const hasBox = t.bbox[2] - t.bbox[0] > 0;
-    pane.classList.add('max-xl:flex');
+    const v = t.validated_at ? when(t.validated_at) : null;
     pane.innerHTML = `
-      <div class="flex items-start gap-lg px-4 pt-3 pb-2 border-b border-ink-200">
-        <div class="flex-1 min-w-0">
-          <h2 class="font-semibold text-ink-900 leading-snug">${esc(t.title || 'Untitled table')}</h2>
-          <p class="text-[12px] text-ink-600 mt-0.5">${esc(KIND_LABEL[d.kind] ?? d.kind)} · ${esc(d.title)}</p>
-          <p class="text-[12px] text-ink-600">${pageText(t)} of ${d.page_count} · ${areaText(t)} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ' · edited' : ''}${t.updated_by_name ? ` · last change: ${esc(t.updated_by_name)}, ${ago(t.updated_at)}` : ''}</p>
+      <div class="h-9 shrink-0 flex items-center gap-md px-2 border-b border-ink-300 bg-ink-50">
+        <a href="/doc?id=${d.id}&table=${t.id}" class="btn-primary btn-sm">Open Full PDF${icon('external', 'size-3.5')}</a>
+        <div data-need="editor" class="flex items-center border border-ink-300 h-7 bg-surface" role="radiogroup" aria-label="Flag">
+          ${(['none', 'valid', 'invalid'] as const).map((x) => `<label class="flag-opt"><input type="radio" name="pflag" value="${x}" ${t.status === x ? 'checked' : ''} ${t.deleted ? 'disabled' : ''} class="sr-only" />${x === 'valid' ? icon('flagOk', 'size-3.5') : x === 'invalid' ? icon('flagNo', 'size-3.5') : ''}${x === 'none' ? 'Unflagged' : x === 'valid' ? 'Valid' : 'Not a Table'}</label>`).join('')}
         </div>
+        <span class="flex-1"></span>
+        ${s === 'deleted' ? `<button data-restore data-need="editor" class="btn-line btn-sm">${icon('restore', 'size-3.5')}Restore</button>`
+          : `<button data-del data-need="editor" class="btn-ghost btn-sm btn-icon" title="Delete (can be undone)">${icon('trash', 'size-3.5')}</button>`}
         <button data-close class="btn-ghost btn-sm btn-icon" title="Close preview (Esc)">${icon('x')}</button>
       </div>
-      <div class="flex flex-wrap items-center gap-md px-4 py-2 border-b border-ink-100">
-        <div data-need="editor" class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
-          ${(['none', 'valid', 'invalid'] as const).map((v) => `<label class="flag-opt"><input type="radio" name="pflag" value="${v}" ${t.status === v ? 'checked' : ''} ${t.deleted ? 'disabled' : ''} class="sr-only" />${v === 'valid' ? icon('flagOk', 'size-3.5') : v === 'invalid' ? icon('flagNo', 'size-3.5') : ''}${v === 'none' ? 'Unflagged' : v === 'valid' ? 'Valid' : 'Not a Table'}</label>`).join('')}
+      <div class="flex-1 min-h-0 overflow-auto p-3 space-y-3">
+        <div class="bg-surface border border-ink-200 px-3 py-2">
+          <h2 class="font-semibold text-ink-900 leading-snug text-[13.5px]">${esc(t.title || 'Untitled table')}</h2>
+          <p class="text-[11.5px] text-ink-600 mt-0.5">${esc(KIND_LABEL[d.kind] ?? d.kind)} · ${esc(d.title)}</p>
+          <p class="text-[11.5px] text-ink-600">Page ${pageText(t)} of ${d.page_count} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ' · edited' : ''}</p>
+          ${canEdit() ? `<p class="text-[11.5px] text-ink-600">${s === 'none' ? 'Not flagged yet' : `${STATE_LABEL[s]}${t.validated_by_name ? ` · flagged by <b class="text-ink-800">${esc(t.validated_by_name)}</b>` : ''}${v ? `, ${v.day} ${v.time}` : ''}`}${t.updated_by_name ? ` · last change: ${esc(t.updated_by_name)}, ${ago(t.updated_at)}` : ''}</p>` : ''}
         </div>
-        <a href="/doc?id=${d.id}&table=${t.id}" class="btn-primary btn-sm ml-auto">${icon('target', 'size-3.5')}Open in PDF</a>
-        ${s === 'deleted' ? `<button data-restore data-need="editor" class="btn-line btn-sm">${icon('restore', 'size-3.5')}Restore</button>`
-          : `<button data-del data-need="editor" class="btn-ghost btn-sm" title="Delete (can be undone)">${icon('trash', 'size-3.5')}Delete</button>`}
-      </div>
-      <div class="flex-1 min-h-0 overflow-auto p-4 space-y-3">
         <section aria-label="Area on the PDF">
-          <h3 class="label">On the PDF</h3>
-          ${hasBox ? `<div class="text-[11px] text-ink-500 mb-1">Page ${t.page}</div><img src="${api.snapshotUrl(t.id, t.bbox, 1.6)}" alt="Table area on page ${t.page}" class="bg-[#fff] border border-ink-200 max-w-full" />` : '<p class="text-[12.5px] text-ink-500">Added by hand, no area on the PDF.</p>'}
-          ${(t.parts ?? []).map((x, k) => `<div class="text-[11px] text-ink-500 mt-2 mb-1">Page ${x.page} · part ${k + 2}${x.skipped ? ` · ${plural(x.skipped, 'repeated header row')} dropped` : ''}</div>
-            <img src="${api.snapshotUrl(t.id, x.bbox, 1.6, k + 1)}" alt="Part ${k + 2} on page ${x.page}" class="bg-[#fff] border border-ink-200 max-w-full" />`).join('')}
+          ${hasBox ? `<img src="${api.snapshotUrl(t.id, t.bbox, 1.6)}" alt="Table area on page ${t.page}" class="bg-[#fff] border border-ink-300 shadow-sm max-w-full" />` : '<p class="text-[12.5px] text-ink-500">Added by hand, no area on the PDF.</p>'}
+          ${(t.parts ?? []).map((x, k) => `<div class="text-[11px] text-ink-600 mt-2 mb-1">Page ${x.page} · part ${k + 2}${x.skipped ? ` · ${plural(x.skipped, 'repeated header row')} dropped` : ''}</div>
+            <img src="${api.snapshotUrl(t.id, x.bbox, 1.6, k + 1)}" alt="Part ${k + 2} on page ${x.page}" class="bg-[#fff] border border-ink-300 shadow-sm max-w-full" />`).join('')}
           ${d.source_pdf ? `<a href="${esc(d.source_pdf)}" target="_blank" rel="noopener" class="inline-flex items-center gap-sm text-[12px] text-brand-600 hover:underline mt-2">${icon('external', 'size-3.5')}Original PDF on BPS</a>` : ''}
         </section>
         <section aria-label="Extracted table">
           <h3 class="label">Extracted (${plural(t.rows.length, 'row')})</h3>
-          <div class="overflow-auto border border-ink-100">${tableHTML(t)}</div>
-          ${t.notes ? `<p class="text-[12px] text-ink-700 whitespace-pre-line border-l-2 border-ink-200 pl-3 mt-2">${esc(t.notes)}</p>` : ''}
+          <div class="overflow-auto border border-ink-200 bg-surface">${tableHTML(t)}</div>
+          ${t.notes ? `<p class="text-[12px] text-ink-700 whitespace-pre-line border-l-2 border-ink-300 pl-3 mt-2">${esc(t.notes)}</p>` : ''}
         </section>
       </div>`;
   }
@@ -339,7 +400,7 @@ import Icon from '../components/Icon.astro';
     const back = current;
     current = null;
     syncUrl();
-    renderList();
+    renderRows();
     renderPreview();
     $(`[data-open="${back}"]`)?.focus();
   }
@@ -355,15 +416,15 @@ import Icon from '../components/Icon.astro';
     } catch (e: any) { toastError(e, () => act(ids, action)); }
   }
 
-  function cardMenu(at: MouseEvent | HTMLElement, id: string) {
+  function rowMenu(at: MouseEvent | HTMLElement, id: string) {
     const t = items.find((x) => x.id === id)!;
     const ids = picked.has(id) && picked.size > 1 ? [...picked] : [id];
     const many = ids.length > 1;
-    const items2: MenuItem[] = [
+    const menu: MenuItem[] = [
       { heading: many ? `${ids.length} tables selected` : t.title || 'Untitled table' },
       ...(many ? [] : [
         { label: 'Preview', icon: 'table', hint: 'Enter', action: () => openPreview(id) },
-        { label: 'Open in PDF', icon: 'target', action: () => (location.href = `/doc?id=${t.document!.id}&table=${id}`) },
+        { label: 'Open Full PDF', icon: 'target', action: () => (location.href = `/doc?id=${t.document!.id}&table=${id}`) },
         'sep' as const,
       ]),
       ...(canEdit() ? [
@@ -380,76 +441,158 @@ import Icon from '../components/Icon.astro';
           : { label: many ? `Delete ${ids.length} Tables` : 'Delete', icon: 'trash', danger: true, action: () => act(ids, 'delete') },
       ]),
     ];
-    contextMenu(at, items2);
+    contextMenu(at, menu);
   }
 
   // ---------------------------------------------------------------- events
-  $('aside').addEventListener('change', (e) => {
-    const i = e.target as HTMLInputElement;
-    const toggle = <T,>(arr: T[], v: T) => (i.checked ? [...new Set([...arr, v])] : arr.filter((x) => x !== v));
-    if (i.dataset.state) f.state = toggle(f.state, i.dataset.state as State);
-    else if (i.dataset.edited) f.edited = i.checked;
-    else if (i.dataset.kind) f.kinds = toggle(f.kinds, i.dataset.kind);
-    else if (i.dataset.doc) f.docs = toggle(f.docs, i.dataset.doc);
-    else if (i.dataset.docgroup) {
-      const ids = i.dataset.docgroup.split(',');
-      f.docs = i.checked ? [...new Set([...f.docs, ...ids])] : f.docs.filter((x) => !ids.includes(x));
-    } else return; // e.g. the document finder
+  $('#f-state').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-state],[data-edited]');
+    if (!b) return;
+    if (b.dataset.state) {
+      const s = b.dataset.state as State;
+      f.state = f.state.includes(s) ? f.state.filter((x) => x !== s) : [...f.state, s];
+    } else f.edited = !f.edited;
     picked.clear();
     load();
   });
-  const resetFilters = () => { Object.assign(f, { state: ['valid'], edited: false, kinds: [], docs: [], q: '' }); $<HTMLInputElement>('#q').value = ''; load(); };
-  $('#reset').addEventListener('click', resetFilters);
+  $('#f-kind').addEventListener('change', () => { const v = $<HTMLSelectElement>('#f-kind').value; f.kinds = v ? [v] : []; picked.clear(); load(); });
+  $('#f-val').addEventListener('change', () => { f.validator = $<HTMLSelectElement>('#f-val').value; picked.clear(); load(); });
+  const resetFilters = () => { Object.assign(f, { state: ['none', 'valid', 'invalid'], edited: false, kinds: [], docs: [], validator: '', q: '' }); node = 'all'; $<HTMLInputElement>('#q').value = ''; $<HTMLSelectElement>('#f-kind').value = ''; load(); };
   $('#q').addEventListener('input', debounce(() => { f.q = $<HTMLInputElement>('#q').value.trim(); load(); }, 250));
   $('#sort').addEventListener('change', () => { f.sort = $<HTMLSelectElement>('#sort').value; load(); });
+  $$<HTMLElement>('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+    f.sort = f.sort === b.dataset.sort ? (b.dataset.sort === 'document' ? 'recent' : 'document') : b.dataset.sort!;
+    $<HTMLSelectElement>('#sort').value = f.sort;
+    load();
+  }));
   $('#more').addEventListener('click', () => load(true));
   $('#selall').addEventListener('change', () => {
     const on = $<HTMLInputElement>('#selall').checked;
     items.forEach((t) => (on ? picked.add(t.id) : picked.delete(t.id)));
-    renderList();
+    renderRows();
   });
+  $('#selclear').addEventListener('click', () => { picked.clear(); renderRows(); });
 
-  $('#list').addEventListener('click', (e) => {
+  /** last row clicked without Shift: where a Shift+click range starts */
+  let anchor: string | null = null;
+  function pickRange(to: string, add: boolean) {
+    const ids = items.map((t) => t.id);
+    const a = ids.indexOf(anchor ?? to), b = ids.indexOf(to);
+    if (a < 0 || b < 0) return;
+    if (!add) picked.clear();
+    ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((id) => picked.add(id));
+    renderRows();
+  }
+  $('#rows').addEventListener('mousedown', (e) => { if (e.shiftKey) e.preventDefault(); }); // no text selection on Shift+click
+  $('#rows').addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     const empty = t.closest<HTMLElement>('[data-empty]');
     if (empty) { empty.dataset.empty === 'unflagged' ? (f.state = ['none'], load()) : resetFilters(); return; }
-    const open = t.closest<HTMLElement>('[data-open]');
-    if (open) return void openPreview(open.dataset.open!);
-    const m = t.closest<HTMLElement>('[data-menu-for]');
-    if (m) return cardMenu(m, m.dataset.menuFor!);
-    // clicking the card body (not a link or control) previews it
-    const c = t.closest<HTMLElement>('[data-card]');
-    if (c && !t.closest('a,button,input,label')) openPreview(c.dataset.card!);
+    if (t.closest('a')) return;
+    const r = t.closest<HTMLElement>('[data-row]');
+    if (!r) return;
+    const id = r.dataset.row!;
+    const box = t.closest<HTMLInputElement>('input[data-pick]');
+    if (e.shiftKey) { // range from the last clicked row
+      e.preventDefault();
+      pickRange(id, e.ctrlKey || e.metaKey);
+      return;
+    }
+    if (box) { anchor = id; return; } // the checkbox itself: handled by "change"
+    if (e.ctrlKey || e.metaKey) { picked.has(id) ? picked.delete(id) : picked.add(id); anchor = id; renderRows(); return; }
+    anchor = id;
+    openPreview(id);
   });
-  $('#list').addEventListener('contextmenu', (e) => {
-    const c = (e.target as HTMLElement).closest<HTMLElement>('[data-card]');
-    if (c && !(e.target as HTMLElement).closest('a')) cardMenu(e, c.dataset.card!);
+  $('#rows').addEventListener('contextmenu', (e) => {
+    const r = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+    if (r) rowMenu(e, r.dataset.row!);
   });
-  // keyboard: ↑↓ between cards, Menu key / Shift+F10 for actions
-  $('#list').addEventListener('keydown', (e) => {
-    const c = (e.target as HTMLElement).closest<HTMLElement>('[data-card]');
-    if (!c) return;
-    if (isMenuKey(e)) { e.preventDefault(); cardMenu(c, c.dataset.card!); return; }
+  // keyboard: ↑↓ move and preview, Space selects, Menu key / Shift+F10 for actions
+  $('#rows').addEventListener('keydown', (e) => {
+    const r = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+    if (!r) return;
+    if (isMenuKey(e)) { e.preventDefault(); rowMenu(r, r.dataset.row!); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      const cards = $$<HTMLElement>('[data-card]');
-      const next = cards[cards.indexOf(c) + (e.key === 'ArrowDown' ? 1 : -1)];
-      if (next) { e.preventDefault(); next.querySelector<HTMLElement>('[data-open]')!.focus(); }
+      const rows = $$<HTMLElement>('[data-row]');
+      const next = rows[rows.indexOf(r) + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (!next) return;
+      e.preventDefault();
+      if (e.shiftKey) { if (!anchor) anchor = r.dataset.row!; pickRange(next.dataset.row!, false); $<HTMLElement>(`[data-open="${next.dataset.row}"]`)?.focus(); return; }
+      anchor = next.dataset.row!;
+      openPreview(next.dataset.row!).then(() => $<HTMLElement>(`[data-open="${next.dataset.row}"]`)?.focus());
     }
   });
-  $('#list').addEventListener('change', (e) => {
+  $('#rows').addEventListener('change', (e) => {
     const i = e.target as HTMLInputElement;
     if (!i.dataset.pick) return;
     i.checked ? picked.add(i.dataset.pick) : picked.delete(i.dataset.pick);
-    i.closest('[data-card]')!.classList.toggle('!border-brand-300', i.checked);
+    i.closest('tr')!.classList.toggle('bg-brand-50', i.checked && i.dataset.pick !== current);
+    $('#summary').textContent = `${picked.size ? `${picked.size} selected · ` : ''}${plural(total, 'table')}`;
     renderBulk();
   });
+  // keyboard: Space on a row toggles it, Shift+↑↓ extends the selection
+  $('#rows').addEventListener('keydown', (e) => {
+    const r = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+    if (!r || !(e.target as HTMLElement).matches('[data-open]')) return;
+    const id = r.dataset.row!;
+    if (e.key === ' ') { e.preventDefault(); picked.has(id) ? picked.delete(id) : picked.add(id); anchor = id; renderRows(); $<HTMLElement>(`[data-open="${id}"]`)?.focus(); }
+  }, true);
   $$('[data-bulk]').forEach((b) => b.addEventListener('click', () => act([...picked], b.dataset.bulk as 'valid')));
   $$('[data-export]').forEach((b) => b.addEventListener('click', () => {
     location.href = api.manyExportUrl([...picked], b.dataset.export as 'xlsx' | 'zip' | 'json', settings.decimal, $<HTMLInputElement>('#ex-title').checked);
   }));
 
+  // ---------------------------------------------------------------- columns: show / hide (remembered)
+  const COLS: [string, string, boolean][] = [['thumb', 'Thumbnail', false], ['status', 'Status', false], ['vby', 'Validated by', true], ['von', 'Validated on', true], ['page', 'Page', false]];
+  const hidden = new Set<string>(JSON.parse(localStorage.getItem('tables-hidden-cols') ?? '[]'));
+  const applyCols = () => { $('#tbl').dataset.hide = [...hidden].join(' '); localStorage.setItem('tables-hidden-cols', JSON.stringify([...hidden])); };
+  function colMenu(at: MouseEvent | HTMLElement) {
+    contextMenu(at, [{ heading: 'Columns' }, ...COLS.filter(([, , ed]) => !ed || canEdit()).map(([k, l]) => ({
+      label: l, icon: hidden.has(k) ? undefined : 'check', hint: hidden.has(k) ? 'hidden' : 'shown',
+      action: () => { hidden.has(k) ? hidden.delete(k) : hidden.add(k); applyCols(); },
+    })), 'sep', { label: 'Show All Columns', icon: 'reset', disabled: !hidden.size, action: () => { hidden.clear(); applyCols(); } }]);
+  }
+  applyCols();
+  $('#cols').addEventListener('click', () => colMenu($('#cols')));
+  $('#tbl thead').addEventListener('contextmenu', (e) => colMenu(e as MouseEvent));
+
+  // ---------------------------------------------------------------- folding the document tree (context menu)
+  /** every category key of the tree as shown ('uncat' included), and the ones below a key */
+  function catKeys(): string[] {
+    const docs = last?.facets.docs ?? [];
+    const keys = new Set<string>();
+    for (const d of docs) { const c = d.category ?? []; if (!c.length) keys.add('uncat'); c.forEach((_, i) => keys.add(pathKey(c.slice(0, i + 1)))); }
+    return [...keys];
+  }
+  const below = (key: string) => key === 'uncat' ? ['uncat'] : catKeys().filter((k) => { if (k === 'uncat') return false; const p = JSON.parse(k) as string[], q = JSON.parse(key) as string[]; return q.every((x, i) => p[i] === x); });
+  function setOpen(keys: string[], on: boolean) {
+    keys.forEach((k) => (on ? openCats.add(k) : openCats.delete(k)));
+    localStorage.setItem('tables-open', JSON.stringify([...openCats]));
+    if (last) renderTree(last);
+  }
+  function treeMenu(at: MouseEvent | HTMLElement, n: HTMLElement) {
+    const key = n.dataset.node!;
+    const isCat = n.hasAttribute('aria-expanded');
+    const items: MenuItem[] = [{ heading: n.title || 'Documents' }, { label: 'Show These Tables', icon: 'table', action: () => selectNode(key) }, 'sep'];
+    if (isCat) items.push(
+      openCats.has(key) ? { label: 'Collapse', icon: 'chevron', action: () => setOpen([key], false) } : { label: 'Expand', icon: 'right', action: () => setOpen([key], true) },
+      { label: 'Expand This and All Below', icon: 'folderOpen', action: () => setOpen(below(key), true) },
+      { label: 'Collapse This and All Below', icon: 'folder', action: () => setOpen(below(key), false) },
+      'sep');
+    items.push({ label: 'Expand All', icon: 'folderOpen', action: () => setOpen(catKeys(), true) },
+      { label: 'Collapse All', icon: 'folder', action: () => setOpen(catKeys(), false) });
+    contextMenu(at, items);
+  }
+  $('#tree').addEventListener('contextmenu', (e) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
+    if (n) treeMenu(e, n);
+  });
+  $('#tree').addEventListener('keydown', (e) => {
+    const n = (e.target as HTMLElement).closest<HTMLElement>('[data-node]');
+    if (n && isMenuKey(e)) { e.preventDefault(); treeMenu(n, n); }
+  });
+
   renderPreview();
-  load();
-  me();
+  me().then(() => load());
   addEventListener('tdp-role', () => load()); // logged out meanwhile: visitors see only valid tables
 </script>

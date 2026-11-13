@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import time
 from pathlib import Path
@@ -15,6 +16,34 @@ from .config import DOCS_DIR
 
 class PdfError(ValueError):
     pass
+
+
+_YEAR = re.compile(r"(?<!\d)(19[5-9]\d|20\d\d)(?!\d)")
+
+
+def guess_year(title: str, meta: dict | None = None, filename: str = "") -> int | None:
+    """The year a publication is about: the last year in its title ("… 2025", "2019–2024" -> 2024),
+    else the BPS release year, else the last year in the file name."""
+    ys = _YEAR.findall(title or "")
+    if ys:
+        return int(ys[-1])
+    rel = str((meta or {}).get("date") or "")[:4]
+    if rel.isdigit() and 1950 <= int(rel) <= 2100:
+        return int(rel)
+    ys = _YEAR.findall(Path(filename or "").stem.replace("_", " "))
+    return int(ys[-1]) if ys else None
+
+
+def clean_tags(tags: list[str]) -> list[str]:
+    """Trimmed, single spaces, at most 40 characters, no duplicates (ignoring case), at most 30."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in tags:
+        t = re.sub(r"\s+", " ", str(t)).strip().strip(",")[:40].strip()
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+    return out[:30]
 
 
 def doc_dir(doc_id: str) -> Path:
@@ -82,9 +111,10 @@ def store_pdf(data: bytes, *, filename: str, title: str, source: str, source_key
             if dup is None:
                 con.execute(
                     "INSERT INTO documents (id,title,filename,source,source_key,meta,category,page_count,pages,size,"
-                    "sha256,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "sha256,created_at,updated_at,created_by,updated_by,year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (doc_id, title, filename, source, source_key, db.dumps(meta or {}), db.dumps(category),
-                     len(pages), db.dumps(pages), len(data), sha, now, now, by, by),
+                     len(pages), db.dumps(pages), len(data), sha, now, now, by, by,
+                     guess_year(title, meta, filename)),
                 )
             else:
                 con.execute("UPDATE documents SET deleted_at=NULL WHERE id=?", (dup["id"],))

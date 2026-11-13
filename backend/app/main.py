@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import threading
+import json
 import time
 from pathlib import Path
 from typing import Literal
@@ -12,11 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from . import api_v1, auth, backup, bps, categories, db, geo, jobs
+from . import api_v1, auth, backup, bps, categories, db, geo, imports, jobs
 from .common import PUBLIC_DOC_SQL, get_doc, get_doc_for, get_table
+from .queue_api import router as queue_router
 from .tables_api import router as tables_router
 from .config import BPS_KEY, FRONTEND_DIST, MAX_PDF_MB
-from .documents import PdfError, delete_document, open_pdf, pdf_path, store_pdf, thumb_path
+from .documents import PdfError, clean_tags, delete_document, guess_year, open_pdf, pdf_path, store_pdf, thumb_path
 from .extract import ENGINES, extract_page, list_engines
 
 app = FastAPI(title="Tabel dari PDF", version="1.1")
@@ -27,6 +28,8 @@ app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(api_v1.router)
 app.include_router(tables_router)
+app.include_router(queue_router)
+imports.start()  # the import queue worker
 
 
 @app.exception_handler(bps.BpsError)
@@ -84,8 +87,17 @@ async def bps_search(
     with db.db() as con:
         keys = {r["source_key"]: r["id"] for r in con.execute(
             "SELECT id, source_key FROM documents WHERE source='bps' AND deleted_at IS NULL").fetchall()}
+        pos = imports.positions(con)
+        queued = {r["source_key"]: r for r in db.rows(con.execute(
+            "SELECT id, source_key, status, done, total, error FROM imports WHERE status IN "
+            "('queued','downloading','processing','extracting','error') ORDER BY created_at"))}
     for it in res["items"]:
-        it["document_id"] = keys.get(f"bps:{kind}:{domain}:{it['id']}")
+        key = f"bps:{kind}:{domain}:{it['id']}"
+        it["document_id"] = keys.get(key)
+        q = queued.get(key)
+        it["queue"] = None if not q or it["document_id"] and q["status"] == "error" else \
+            {"id": q["id"], "status": q["status"], "position": pos.get(q["id"]), "done": q["done"],
+             "total": q["total"], "error": q["error"]}
     return res
 
 
@@ -111,78 +123,45 @@ class BpsImport(BaseModel):
     engine: str = "auto"
 
 
-_imports: dict[str, dict] = {}
+def _import_state(imp: dict) -> dict:
+    """An import of the queue, in the shape of the earlier one-off import API."""
+    status = {"queued": "starting", "extracting": "done"}.get(imp["status"], imp["status"])
+    doc = _doc(imp["document_id"]) if imp["document_id"] and status == "done" else None
+    return {"id": imp["id"], "status": status, "done": imp["done"], "total": imp["total"], "document": doc,
+            "job": None, "error": imp["error"]}
 
 
 @app.post("/api/bps/import")
 def bps_import(body: BpsImport):
-    """Start importing a BPS item. Returns the existing document, or an import id to poll for progress."""
-    key = f"bps:{body.kind}:{body.domain}:{body.id}"
-    with db.db() as con:
-        existing = db.row(con.execute("SELECT * FROM documents WHERE source_key=?", (key,)).fetchone())
-        if existing and existing["deleted_at"]:
-            con.execute("UPDATE documents SET deleted_at=NULL WHERE id=?", (existing["id"],))
-    if existing:
-        return {"document": _doc(existing["id"]), "job": None, "existing": True}
-    iid = db.new_id()
-    _imports[iid] = {"id": iid, "status": "starting", "done": 0, "total": None, "document": None, "job": None,
-                     "error": None, "cancel": False}
-    threading.Thread(target=_run_import, args=(iid, body, key, auth.current_user_id()), daemon=True).start()
-    return {"import": _public(_imports[iid]), "existing": False}
-
-
-def _public(st: dict) -> dict:
-    return {k: v for k, v in st.items() if k != "cancel"}
-
-
-def _run_import(iid: str, body: BpsImport, key: str, by: str | None = None) -> None:
-    st = _imports[iid]
-    try:
-        item = bps.detail(body.kind, body.id, domain=body.domain, lang=body.lang)
-        st.update(status="downloading", total=bps.parse_size(item.get("size")))
-        data = bps.download(item["pdf"], progress=lambda d, t: st.update(done=d, total=t or st["total"]),
-                            cancelled=lambda: st["cancel"])
-        st["status"] = "processing"
-        meta = item | {"domain": body.domain, "lang": body.lang}
-        doc = store_pdf(data, filename=f"{body.kind}-{body.id}.pdf", title=item["title"], source="bps",
-                        source_key=key, meta=meta, by=by)
-        if doc.get("source_key") != key and doc["source"] != "bps":
-            # same file was uploaded before: attach the BPS metadata to it
-            with db.db() as con:
-                con.execute("UPDATE documents SET source='bps', source_key=?, meta=?, title=?, category=CASE "
-                            "WHEN category IS NULL OR category='[]' THEN ? ELSE category END WHERE id=?",
-                            (key, db.dumps(meta), item["title"], db.dumps(categories.for_bps(meta, item["title"])),
-                             doc["id"]))
-            doc = _doc(doc["id"])
-        st["job"] = _job_or_running(doc, body.engine, by) if body.extract else None
-        st.update(status="done", document=doc)
-    except bps.Cancelled:
-        st.update(status="cancelled")
-    except (bps.BpsError, PdfError) as e:
-        st.update(status="error", error=str(e))
-    except Exception as e:  # noqa: BLE001
-        st.update(status="error", error=f"Import failed: {type(e).__name__}")
+    """Add one BPS item to the import queue (see /api/queue/imports for several)."""
+    r = imports.enqueue([body.model_dump()], auth.current_user_id())[0]
+    if r["existing"]:
+        return {"document": _doc(r["document_id"]), "job": None, "existing": True}
+    return {"import": _import_state(r["import"]), "existing": False}
 
 
 @app.get("/api/bps/import/{iid}")
 def import_status(iid: str):
-    if iid not in _imports:
+    imp = imports.get(iid)
+    if not imp:
         raise HTTPException(404, "Import not found")
-    return _public(_imports[iid])
+    return _import_state(imp)
 
 
 @app.post("/api/bps/import/{iid}/cancel")
 def import_cancel(iid: str):
-    if iid not in _imports:
+    if not imports.get(iid):
         raise HTTPException(404, "Import not found")
-    _imports[iid]["cancel"] = True
+    imports.cancel(iid)
     return {"ok": True}
 
 
 def _job_or_running(doc: dict, engine: str, by: str | None) -> dict | None:
-    """Start finding tables after an upload / import; when a job already runs on the document, report that one."""
+    """Start finding tables after an upload; when a job already runs on the document, report that one.
+    Uploads are not held to JOBS_PER_USER (several files are uploaded at once): their searches wait in line for a
+    free worker (JOB_WORKERS) and show on the queue page. The limit applies to starting a search by hand."""
     try:
-        return jobs.create_job(doc, engine, None, by=by)
+        return jobs.create_job(doc, engine, None, by=by, limit=False)
     except jobs.JobConflict as e:
         return e.job
 
@@ -209,18 +188,49 @@ def list_documents(request: Request, q: str = ""):
             d.update(table_count=d["valid_count"], last_job_status=None)
             d.pop("created_by", None)
             d.pop("updated_by", None)
+    else:
+        names = auth.user_names()
+        for d in docs:
+            auth.with_names(d, names)
     return docs
+
+
+def _json_list(s: str, what: str) -> list[str] | None:
+    if not s.strip():
+        return None
+    try:
+        v = json.loads(s)
+    except ValueError as e:
+        raise HTTPException(422, f"{what}: not a JSON list") from e
+    if not isinstance(v, list):
+        raise HTTPException(422, f"{what}: not a JSON list")
+    return [str(x) for x in v]
 
 
 @app.post("/api/documents")
 async def upload(file: UploadFile = File(...), title: str = Form(""), extract: bool = Form(False),
-                 engine: str = Form("auto")):
+                 engine: str = Form("auto"), year: int | None = Form(None, ge=1900, le=2100),
+                 tags: str = Form("", description='JSON list, e.g. ["IPM"]'),
+                 category: str = Form("", description='JSON path, e.g. ["Sosial"]; empty = keep / uncategorised')):
+    """Upload a PDF. The publication year is required: give it, or have it in the title or file name."""
+    name = file.filename or "upload.pdf"
+    tag_list, cat = _json_list(tags, "tags"), _json_list(category, "category")
+    year = year or guess_year(title, None, name)
+    if not year:
+        raise HTTPException(422, f"Set the publication year of {name}.")
     data = await file.read(MAX_PDF_MB * 1024 * 1024 + 1)
     if len(data) > MAX_PDF_MB * 1024 * 1024:
         raise HTTPException(413, f"PDF larger than {MAX_PDF_MB} MB")
     by = auth.current_user_id()
-    doc = await run_in_threadpool(store_pdf, data, filename=file.filename or "upload.pdf", title=title.strip(),
-                                  source="upload", by=by)
+    doc = await run_in_threadpool(store_pdf, data, filename=name, title=title.strip(), source="upload", by=by)
+    with db.db() as con:  # the same file uploaded again keeps what it has, and gets what it lacks
+        con.execute("UPDATE documents SET year=? WHERE id=? AND (year IS NULL OR source='upload' AND created_at>?)",
+                    (year, doc["id"], time.time() - 5))
+        if tag_list:
+            con.execute("UPDATE documents SET tags=? WHERE id=?", (db.dumps(clean_tags((doc.get("tags") or []) + tag_list)), doc["id"]))
+        if cat is not None and not doc.get("category"):
+            con.execute("UPDATE documents SET category=? WHERE id=?", (db.dumps(categories.clean(cat)), doc["id"]))
+    doc = _doc(doc["id"])
     job = _job_or_running(doc, engine, by) if extract else None
     return {"document": doc, "job": job}
 
@@ -242,18 +252,29 @@ def get_document(doc_id: str, request: Request):
 class DocPatch(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=500)
     category: list[str] | None = Field(None, max_length=6)  # [] = uncategorised
+    year: int | None = Field(None, ge=1900, le=2100)        # publication year
+    tags: list[str] | None = Field(None, max_length=60)
 
 
 @app.patch("/api/documents/{doc_id}")
-def patch_document(doc_id: str, body: DocPatch):
-    _doc(doc_id)
+def patch_document(doc_id: str, body: DocPatch, request: Request):
+    d = _doc(doc_id)
+    if (body.tags is not None or body.year is not None) and d["source"] != "upload":
+        # editors set the year and tags of uploads; those of BPS documents only an admin
+        u = auth.current_user(request)
+        if not u or u["role"] != "admin":
+            raise HTTPException(403, "Only an admin can change the year and tags of a document from BPS.")
     with db.db() as con:
         if body.title is not None:
             con.execute("UPDATE documents SET title=?, updated_at=?, updated_by=? WHERE id=?",
                         (body.title.strip(), time.time(), auth.current_user_id(), doc_id))
         if body.category is not None:  # moving does not count as an edit (keeps the "recent" order)
             con.execute("UPDATE documents SET category=? WHERE id=?", (db.dumps(categories.clean(body.category)), doc_id))
-    return _doc(doc_id)
+        if body.year is not None:
+            con.execute("UPDATE documents SET year=? WHERE id=?", (body.year, doc_id))
+        if body.tags is not None:
+            con.execute("UPDATE documents SET tags=? WHERE id=?", (db.dumps(clean_tags(body.tags)), doc_id))
+    return auth.with_names(_doc(doc_id))
 
 
 class CategoryMove(BaseModel):

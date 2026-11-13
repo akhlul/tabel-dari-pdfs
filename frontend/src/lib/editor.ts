@@ -515,21 +515,7 @@ export class TableEditor {
     const ro = this.readonly;
     this.root.innerHTML = `
       <div class="flex flex-col h-full min-h-0">
-        <div class="px-3 pt-2.5 pb-2 border-b border-ink-100 space-y-1.5">
-          <div class="flex items-start gap-2">
-            <span class="label !mb-0 pt-1.5 w-11 shrink-0" aria-hidden="true">Title</span>
-            <textarea data-title rows="1" ${ro ? 'readonly' : ''} class="flex-1 resize-none text-[13.5px] font-semibold text-ink-900 leading-snug bg-transparent border border-transparent
-              hover:border-ink-200 focus:border-brand-500 focus:bg-surface focus:outline-none px-1.5 py-1"
-              aria-label="Table title" placeholder="Table title, for example Tabel 2.1 Panjang Jalan">${esc(this.title)}</textarea>
-          </div>
-          <div class="flex items-start gap-2">
-            <span class="label !mb-0 pt-1.5 w-11 shrink-0" aria-hidden="true">Notes</span>
-            <textarea data-notes rows="1" ${ro ? 'readonly' : ''} class="flex-1 resize-none text-[12px] text-ink-600 leading-snug bg-transparent border border-transparent
-              hover:border-ink-200 focus:border-brand-500 focus:bg-surface focus:outline-none px-1.5 py-1"
-              aria-label="Notes" placeholder="Source and footnotes, for example Sumber: BPS">${esc(this.notes)}</textarea>
-          </div>
-        </div>
-        <div role="toolbar" aria-label="Cells, rows and columns" class="flex flex-wrap items-center gap-md px-2 min-h-10 py-1 border-b border-ink-200 bg-ink-50 ${ro ? 'opacity-50 pointer-events-none' : ''}">
+        <div role="toolbar" aria-label="Cells, rows and columns" class="flex flex-wrap items-center gap-md px-2 min-h-9 py-0.5 border-b border-ink-200 bg-ink-50 ${ro ? 'hidden' : ''}">
           ${this.tool('undo', 'undo', 'Undo (Ctrl+Z)')}${this.tool('redo', 'redo', 'Redo (Ctrl+Y)')}
           <span class="w-px h-5 bg-ink-200" role="separator"></span>
           ${this.group('Cells', 'mergeCells', [['merge', 'mergeCells', 'Merge Cells', 'Ctrl+M'], ['unmerge', 'splitCells', 'Unmerge Cells', ''], ['clear', 'x', 'Clear Contents', 'Del']])}
@@ -554,19 +540,12 @@ export class TableEditor {
               <option value=".">Dot · ${SEP_LABEL['.']}</option>
             </select>
           </label>
+          <span data-decinfo class="text-[11.5px] whitespace-nowrap" aria-live="polite"></span>
         </div>
-        <div data-grid class="flex-1 min-h-0 overflow-auto bg-surface"></div>
+        <div data-grid tabindex="0" aria-label="Table cells" class="flex-1 min-h-0 overflow-auto bg-surface focus-visible:outline-2 focus-visible:outline-brand-500 focus-visible:-outline-offset-2"></div>
         <div data-status class="flex items-center gap-3 px-3 h-7 border-t border-ink-200 text-[11px] text-ink-500 bg-ink-50/70 whitespace-nowrap overflow-hidden"></div>
       </div>`;
     this.grid = this.root.querySelector('[data-grid]')!;
-    for (const key of ['title', 'notes'] as const) {
-      const ta = this.root.querySelector<HTMLTextAreaElement>(`[data-${key}]`)!;
-      const grow = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 2, key === 'notes' ? 140 : 80)}px`; };
-      requestAnimationFrame(grow);
-      ta.addEventListener('input', grow);
-      ta.addEventListener('change', () => { this[key] = ta.value.trim(); this.onChange({ [key]: this[key] }); });
-      if (key === 'title') ta.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ta.blur(); } });
-    }
     this.root.querySelectorAll<HTMLButtonElement>('[data-op]').forEach((b) =>
       b.addEventListener('mousedown', (e) => e.preventDefault()), // keep cell focus
     );
@@ -599,14 +578,24 @@ export class TableEditor {
     if (!sel) return;
     const g = detectDecimal(this.rows, this.header);
     const name = g.decimal === ',' ? 'comma' : 'dot';
-    sel.options[0]!.textContent = `Auto · ${SEP_LABEL[g.decimal]}${g.sure ? '' : '?'}`;
-    sel.title = g.strong
-      ? `Detected ${name} as the decimal separator from ${g.strong} number${g.strong > 1 ? 's' : ''}`
+    const auto = this.decimalSep === 'auto';
+    const unsure = !g.sure && g.weak > 0;
+    // the detected separator is written in the option itself, and why next to it
+    sel.options[0]!.textContent = `Auto: ${name} · ${SEP_LABEL[g.decimal]}`;
+    const why = g.strong
+      ? `detected from ${g.strong} number${g.strong > 1 ? 's' : ''}`
       : g.weak
-        ? `Probably ${name}: only ambiguous numbers like 1.234 found. Choose Comma or Dot to be sure.`
-        : `No decimal numbers found, using ${name}`;
-    sel.classList.toggle('text-amber-700', this.decimalSep === 'auto' && !g.sure && g.weak > 0);
+        ? `not sure: only numbers like 1.234`
+        : 'no decimal numbers found, comma is used';
+    sel.title = `Auto: ${name} (${SEP_LABEL[g.decimal]}), ${why}${!g.sure && g.weak ? ` (${g.weak}). Choose Comma or Dot to be sure.` : ''}`;
+    sel.classList.toggle('!text-accent-600', auto && unsure);
+    const info = this.root.querySelector<HTMLElement>('[data-decinfo]');
+    if (info) {
+      info.textContent = auto ? why : `detected: ${name}${g.decimal === this.decimalSep ? ', the same' : `, not ${this.decimalSep === ',' ? 'comma' : 'dot'}`}`;
+      info.className = `text-[11.5px] whitespace-nowrap ${auto && unsure ? 'text-accent-600 font-medium' : 'text-ink-500'}`;
+    }
   }
+
 
   private tool(ic: string, op: string, title: string) {
     return `<button data-op="${op}" class="btn-ghost btn-sm btn-icon" title="${esc(title)}">${icon(ic, 'size-4')}</button>`;

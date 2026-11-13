@@ -50,10 +50,16 @@
   --color-accent-500: #f28b24;
   --color-accent-600: #a34c04;
 }
+:root {
+  /* top bar (navy, the same strip on every page) */
+  --nav-bg: #1f2f4a; --nav-hover: #2a3d5e; --nav-active: #34496d; --nav-line: #0f1a2c; --nav-sep: #3a4d6e;
+  --nav-text: #c9d3e3; --nav-badge: #0b1322; --nav-badge-line: #5d7397;
+}
 
-/* dark color scheme (follows the system setting) */
+/* dark color scheme: follows the system setting, unless Settings → Appearance chooses one
+   (<html data-theme="light|dark">, set before the first paint by lib/auth.ts EARLY) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --color-surface: #1b2028;
     --color-header: #0d1724;
@@ -87,7 +93,46 @@
     --color-emerald-700: #4cd3a3;
     --color-orange-50: #35260f;
     --color-amber-400: #f5b94a;
+    --nav-bg: #111a29; --nav-hover: #1c2a40; --nav-active: #27395a; --nav-line: #070c14; --nav-sep: #2e3e5a;
+    --nav-text: #b9c5d8; --nav-badge: #05090f; --nav-badge-line: #4b5f80;
   }
+}
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-surface: #1b2028;
+    --color-header: #0d1724;
+    --color-ink-50: #13171d;
+    --color-ink-100: #232a34;
+    --color-ink-200: #343d4a;
+    --color-ink-300: #4c5767;
+    --color-ink-400: #8b97aa;
+    --color-ink-500: #9aa6b8;
+    --color-ink-600: #b3bdcc;
+    --color-ink-700: #c8d0dc;
+    --color-ink-800: #dde3eb;
+    --color-ink-900: #f1f4f8;
+    --color-brand-50: #172739;
+    --color-brand-100: #1e3653;
+    --color-brand-200: #2b4d78;
+    --color-brand-300: #3f6aa3;
+    --color-brand-500: #5b9bec;
+    --color-brand-600: #4d8ee2;
+    --color-brand-700: #2f6fc4;
+    --color-brand-800: #275ea8;
+    --color-brand-900: #1d4a87;
+    --color-accent-600: #f6a65a;
+    --color-red-50: #36191c;
+    --color-red-200: #6b2a31;
+    --color-red-300: #8a3a42;
+    --color-red-600: #f0646d;
+    --color-red-700: #f58a91;
+    --color-red-800: #f7a7ad;
+    --color-emerald-600: #14946f;
+    --color-emerald-700: #4cd3a3;
+    --color-orange-50: #35260f;
+    --color-amber-400: #f5b94a;
+    --nav-bg: #111a29; --nav-hover: #1c2a40; --nav-active: #27395a; --nav-line: #070c14; --nav-sep: #2e3e5a;
+    --nav-text: #b9c5d8; --nav-badge: #05090f; --nav-badge-line: #4b5f80;
 }
 
 @layer base {
@@ -113,7 +158,8 @@
 @utility btn-icon { @apply w-8 px-0; }
 @utility field {
     @apply h-8 px-2.5 text-[13px] bg-surface border border-ink-200 text-ink-900 placeholder:text-ink-400
-           hover:border-ink-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+           hover:border-ink-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100
+           disabled:bg-ink-100 disabled:text-ink-600 disabled:hover:border-ink-200;
   }
 @utility label { @apply block text-[11px] font-semibold uppercase tracking-wider text-ink-500 mb-1; }
 @utility chip { @apply inline-flex items-center gap-sm h-5 px-1.5 text-[11px] font-medium border whitespace-nowrap; }
@@ -125,8 +171,57 @@
 @utility skeleton { @apply bg-ink-100 animate-pulse; }
 @utility toolbar { @apply flex items-center gap-md; }
 
+/* top bar (Layout.astro): one navy strip, text only. Same colors in the light and dark scheme. */
+@layer components {
+  .topbar { background: var(--nav-bg); color: var(--nav-text); border-bottom: 1px solid var(--nav-line); }
+  .topbar-link { display: flex; align-items: center; padding: 0 16px; color: var(--nav-text); border-block: 3px solid transparent; }
+  .topbar-link:hover { background: var(--nav-hover); color: #fff; }
+  .topbar-link[aria-current="page"] { background: var(--nav-active); color: #fff; font-weight: 600; border-bottom-color: #fff; }
+  .topbar-link:focus-visible, .topbar-text:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+  .topbar-badge { min-width: 20px; height: 17px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--nav-badge); color: #fff; border: 1px solid var(--nav-badge-line); font-size: 11px; font-weight: 700; line-height: 1; }
+  .topbar-user { border-left: 1px solid var(--nav-sep); }
+  .topbar-text { display: flex; align-items: center; height: 100%; padding: 0 10px; color: var(--nav-text); }
+  .topbar-text:hover { color: #fff; text-decoration: underline; }
+  .topbar-text[aria-current="page"] { color: #fff; font-weight: 600; }
+
+  /* workspace: labels of the details pane */
+  .meta-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-ink-600); margin-bottom: 3px; }
+  /* layout presets menu */
+  .lp-opt { display: flex; width: 100%; align-items: center; gap: 12px; padding: 8px 14px; text-align: left; font-size: 13px; color: var(--color-ink-800); }
+  .lp-opt:hover, .lp-opt:focus-visible { background: var(--color-ink-50); outline: none; }
+  .lp-opt[aria-checked="true"] { background: var(--color-brand-50); color: var(--color-brand-700); font-weight: 600; }
+  .lp-opt svg { flex: none; color: var(--color-ink-500); }
+  .lp-opt[aria-checked="true"] svg { color: var(--color-brand-600); }
+  .lp-opt[aria-checked="true"] svg .f { fill: var(--color-brand-100); }
+  .lp-switch { position: relative; width: 30px; height: 16px; flex: none; background: var(--color-ink-300); }
+  .lp-switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; background: #fff; transition: left .12s; }
+  [aria-checked="true"] > .lp-switch { background: var(--color-brand-600); }
+  [aria-checked="true"] > .lp-switch::after { left: 16px; }
+
+  /* vertical divider between resizable panes (lib/split.ts), with a grip */
+  .splitter { width: 6px; flex: none; cursor: col-resize; background: var(--color-ink-100); border-inline: 1px solid var(--color-ink-200);
+    display: flex; align-items: center; justify-content: center; }
+  .splitter::after { content: ""; width: 2px; height: 24px; border-inline: 1px dotted var(--color-ink-400); }
+  .splitter:hover, .splitter:focus-visible { background: var(--color-brand-100); outline: none; }
+
+  /* counts next to tree items and filters */
+  .count-badge { min-width: 22px; height: 18px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--color-ink-700); background: var(--color-ink-100); border: 1px solid var(--color-ink-200); }
+  /* library: where a document comes from, its year and tags */
+  .src-tag { display: inline-flex; align-items: center; height: 16px; padding: 0 5px; margin-right: 6px; vertical-align: 1px;
+    font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-ink-700); border: 1px solid var(--color-ink-400); }
+  .src-tag.is-upload { background: var(--color-ink-700); border-color: var(--color-ink-700); color: var(--color-surface); }
+  .tag-year, .tag-chip, .tag-add, .tag-miss { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; font-size: 11px;
+    background: var(--color-surface); color: var(--color-ink-800); border: 1px solid var(--color-ink-300); white-space: nowrap; }
+  .tag-year { font-weight: 600; border-left: 3px solid var(--color-ink-600); }
+  .tag-chip:hover, .tag-add:hover { border-color: var(--color-brand-500); color: var(--color-brand-700); }
+  .tag-add { border-style: dashed; color: var(--color-ink-600); }
+  .tag-miss { border: 1px dashed var(--color-ink-700); background: var(--color-ink-50); font-weight: 600; color: var(--color-ink-900); }
+}
+
 /* segmented radio (flag) */
-.flag-opt { display: flex; align-items: center; gap: var(--spacing-sm); padding: 0 8px; height: 100%; font-size: 12px; font-weight: 500; color: var(--color-ink-600); border-left: 1px solid var(--color-ink-200); }
+.flag-opt { display: flex; align-items: center; white-space: nowrap; gap: var(--spacing-sm); padding: 0 8px; height: 100%; font-size: 12px; font-weight: 500; color: var(--color-ink-600); border-left: 1px solid var(--color-ink-200); }
 .flag-opt:first-child { border-left: 0; }
 .flag-opt:hover { background: var(--color-ink-50); }
 .flag-opt:has(input:checked) { background: #434f61; color: #fff; }

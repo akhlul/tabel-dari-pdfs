@@ -55,6 +55,9 @@ const P: Record<string, string> = {
   login: '<path d="M14 4h6v16h-6"/><path d="M3 12h11"/><path d="m10 8 4 4-4 4"/>',
   logout: '<path d="M10 4H4v16h6"/><path d="M9 12h12"/><path d="m17 8 4 4-4 4"/>',
   lock: '<rect x="4" y="10" width="16" height="11"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  kebab: '<circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/>',
+  arrowUp: '<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
   grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
 };
 

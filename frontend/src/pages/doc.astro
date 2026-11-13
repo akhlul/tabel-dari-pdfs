@@ -4,24 +4,22 @@ import Icon from '../components/Icon.astro';
 ---
 <Layout title="Workspace" active="doc" full>
   <h1 id="doc-h1" class="sr-only">Document</h1>
-  <!-- document toolbar -->
-  <div class="min-h-12 py-1.5 shrink-0 bg-surface border-b border-ink-200 flex flex-wrap items-center gap-lg px-3" role="toolbar" aria-label="Document">
+  <!-- document header: back, title, facts, and the actions for the whole document -->
+  <div class="min-h-11 py-1 shrink-0 bg-ink-50 border-b border-ink-300 flex flex-wrap items-center gap-lg px-2" role="toolbar" aria-label="Document">
     <a href="/" class="btn-ghost btn-sm btn-icon" title="Back to library"><Icon name="left" /></a>
     <div class="min-w-72 flex-1 flex items-center gap-lg">
-      <span id="kind" class="chip border-ink-200 text-ink-600 bg-ink-50 shrink-0"></span>
-      <input id="title" aria-label="Document title" title="Document title (click to rename)" class="min-w-0 flex-1 text-[14px] font-semibold text-ink-900 bg-transparent border border-transparent
+      <input id="title" aria-label="Document title" title="Document title (click to rename)" class="min-w-0 flex-1 text-[15px] font-semibold text-ink-900 bg-transparent border border-transparent
         hover:border-ink-200 focus:border-brand-500 focus:bg-surface focus:outline-none px-1.5 h-8 truncate" />
-      <span id="meta" class="text-[12px] text-ink-500 whitespace-nowrap hidden xl:inline"></span>
+      <span id="meta" class="flex items-center gap-sm whitespace-nowrap"></span>
     </div>
     <div class="toolbar">
       <div class="flex items-center border border-ink-200 h-8 bg-surface" data-need="editor">
-        <select id="engine" aria-label="Extraction method" class="h-full px-2 text-[13px] bg-transparent border-r border-ink-200 focus:outline-none"></select>
+        <select id="engine" aria-label="Extraction method" class="h-full px-2 text-[13px] bg-transparent border-r border-ink-200 focus:outline-none max-w-40"></select>
         <input id="pages" aria-label="Pages to extract" class="h-full w-24 px-2 text-[13px] bg-transparent focus:outline-none" placeholder="All pages" title="Pages to extract, for example 1–5, 9" />
       </div>
-      <button id="run" class="btn-primary" data-need="editor"><Icon name="play" class="size-3.5" />Get All Tables</button>
       <div class="relative" data-menu>
-        <button class="btn-line" data-menu-toggle title="Change the arrangement of PDF, table list and editor"><Icon name="grid" />Layout<Icon name="chevron" class="size-3.5" /></button>
-        <div id="layoutmenu" class="menu hidden right-0 w-80"></div>
+        <button class="btn-line" data-menu-toggle title="Arrange the PDF, the table list and the editor"><Icon name="grid" />Layout<Icon name="chevron" class="size-3.5" /></button>
+        <div id="layoutmenu" class="menu hidden right-0 w-[340px] !py-0" data-keep-open></div>
       </div>
       <div class="relative" data-menu>
         <button class="btn-line" data-menu-toggle><Icon name="download" />Export<Icon name="chevron" class="size-3.5" /></button>
@@ -44,6 +42,7 @@ import Icon from '../components/Icon.astro';
             <input id="ex-title" type="checkbox" class="accent-brand-700" />Write the title above each table</label>
         </div>
       </div>
+      <button id="run" class="btn-primary" data-need="editor"><Icon name="play" class="size-3.5" />Get All Tables</button>
     </div>
   </div>
 
@@ -57,22 +56,29 @@ import Icon from '../components/Icon.astro';
     </div>
   </div>
 
+  <!-- continuation tables found: join them automatically, or review them one by one (flags stay manual) -->
+  <div id="joinoffer" data-need="editor" class="hidden shrink-0 flex-wrap items-center gap-lg px-3 py-1.5 border-b border-brand-200 bg-brand-50 text-[12.5px] text-ink-800" role="region" aria-label="Join continuation tables"></div>
+
   <!-- panes are arranged by lib/layout.ts inside #work -->
   <div id="work" class="flex-1 min-h-0 flex"></div>
   <div id="panes" class="hidden">
+  <!-- A: the PDF, with the page rail -->
   <div id="paneA" class="flex-1 min-w-0 min-h-0 flex" role="region" aria-label="PDF">
-    <nav id="rail" aria-label="Pages" class="w-14 shrink-0 border-r border-ink-200 bg-surface overflow-y-auto py-1 text-[11.5px]"></nav>
+    <nav id="rail-wrap" aria-label="Pages" class="w-[58px] shrink-0 border-r border-ink-200 bg-surface flex flex-col">
+      <div class="h-9 shrink-0 grid place-items-center border-b border-ink-200 bg-ink-50 text-ink-500" title="Pages: the number shows how many tables a page has (green: one of them is valid)"><Icon name="file" class="size-4" /></div>
+      <div id="rail" class="flex-1 min-h-0 overflow-y-auto py-0.5 text-[11.5px]"></div>
+    </nav>
     <section class="@container flex-1 min-w-0 flex flex-col bg-ink-100">
-      <div class="h-10 shrink-0 flex items-center gap-md px-2 border-b border-ink-200 bg-surface overflow-hidden" role="toolbar" aria-label="PDF view">
+      <div class="h-9 shrink-0 flex items-center gap-md px-2 border-b border-ink-200 bg-ink-50 overflow-hidden" role="toolbar" aria-label="PDF view">
         <button id="zout" class="btn-ghost btn-sm btn-icon" title="Zoom out (-)"><Icon name="zoomout" /></button>
         <button id="zlabel" class="btn-ghost btn-sm w-14 tabular-nums" title="Fit to width">100%</button>
         <button id="zin" class="btn-ghost btn-sm btn-icon" title="Zoom in (+)"><Icon name="zoomin" /></button>
         <span class="w-px h-5 bg-ink-200 mx-1" role="separator"></span>
-        <label class="text-[12px] text-ink-600 flex items-center gap-sm whitespace-nowrap">Page:
+        <label class="text-[12px] text-ink-600 flex items-center gap-sm whitespace-nowrap">Page
           <input id="pgin" class="field h-6 w-12 px-1 text-center text-[12px]" value="1" />
           <span id="pgcount">of –</span></label>
         <span class="w-px h-5 bg-ink-200 mx-1" role="separator"></span>
-        <button id="draw" data-need="editor" class="btn-line btn-sm" title="Drag a rectangle over a table to extract only that area (R)"><Icon name="crop" class="size-3.5" /><span id="drawlabel">Draw Table Area</span></button>
+        <button id="draw" data-need="editor" class="btn-line btn-sm" title="Drag a rectangle over a table to extract only that area (R)"><Icon name="crop" class="size-3.5" /><span id="drawlabel">Draw Area</span></button>
         <button id="seltext" class="btn-ghost btn-sm" title="Select and copy text, also inside table areas (T)"><Icon name="textCursor" class="size-3.5" /><span id="seltextlabel" class="hidden @2xl:inline">Select Text</span></button>
         <button id="pagex" data-need="editor" class="btn-ghost btn-sm" title="Run extraction again on the page shown"><Icon name="reset" class="size-3.5" /><span class="hidden @3xl:inline">Extract This Page</span><span class="@3xl:hidden">This Page</span></button>
         <label class="ml-auto flex items-center gap-md text-[12px] text-ink-600 pr-1 whitespace-nowrap" title="Show the table areas on the PDF">
@@ -88,57 +94,81 @@ import Icon from '../components/Icon.astro';
     </section>
   </div>
 
+  <!-- B: tables (grouped by page) and pages -->
   <div id="paneB" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table list">
-      <div class="h-10 shrink-0 flex items-center gap-md px-3 border-b border-ink-200">
-        <span class="text-[12px] font-semibold uppercase tracking-wider text-ink-500" id="tlist-label">Tables</span>
-        <span id="tcount" class="chip border-ink-200 text-ink-700 bg-ink-50">0</span>
+    <div class="h-9 shrink-0 flex items-center px-3 border-b border-ink-200 bg-ink-50">
+      <h2 class="text-[11px] font-bold tracking-[.06em] text-ink-700">TABLES <span id="tcount" class="font-normal tabular-nums text-ink-600">0</span></h2>
+    </div>
+    <div id="list-tables" class="flex-1 min-h-0 flex flex-col">
+      <div class="h-9 shrink-0 flex items-center gap-md px-2 border-b border-ink-100">
         <div class="relative" data-menu>
           <button class="btn-line btn-sm" data-menu-toggle title="Which tables to list"><Icon name="filter" class="size-3.5" /><span id="flabel">Filter</span><Icon name="chevron" class="size-3" /></button>
           <div id="fmenu" class="menu hidden left-0 w-64 py-2" data-keep-open></div>
         </div>
-        <button id="addtable" data-need="editor" class="ml-auto btn-ghost btn-sm" title="Add an empty table on the page shown" aria-label="Add Empty Table"><Icon name="plus" class="size-3.5" /><span class="hidden @sm:inline">Add Empty Table</span></button>
+        <span id="tlist-label" class="sr-only">Tables</span>
+        <button id="addtable" data-need="editor" class="ml-auto btn-ghost btn-sm" title="Add an empty table on the page shown" aria-label="Add Empty Table"><Icon name="plus" class="size-3.5" /><span class="hidden @xs:inline">Add</span></button>
       </div>
       <div id="tlist" role="listbox" aria-multiselectable="true" aria-labelledby="tlist-label" tabindex="0"
         class="@container flex-1 min-h-0 overflow-y-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"></div>
+    </div>
   </div>
 
-  <div id="paneC" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table editor">
-      <div id="tbar" class="hidden shrink-0 flex flex-wrap items-center gap-md px-2 py-1.5 border-b border-ink-200 bg-surface" role="toolbar" aria-label="Table">
-        <div data-need="editor" class="flex items-center border border-ink-200 h-7" role="radiogroup" aria-label="Flag">
-          <label class="flag-opt" title="No decision yet"><input type="radio" name="flag" value="none" class="sr-only" />Unflagged</label>
-          <label class="flag-opt" title="A real table, keep it (V)"><input type="radio" name="flag" value="valid" class="sr-only" /><Icon name="flagOk" class="size-3.5" />Valid</label>
-          <label class="flag-opt" title="Not a table, e.g. a chart or a text box (X)"><input type="radio" name="flag" value="invalid" class="sr-only" /><Icon name="flagNo" class="size-3.5" />Not a Table</label>
-        </div>
-        <span id="tbadge" class="text-[11.5px] text-ink-500 px-1"></span>
-        <span id="savestate" role="status" class="text-[11.5px] text-ink-500 flex items-center gap-sm"></span>
-        <div class="ml-auto toolbar">
-          <div class="relative" data-menu data-need="editor">
-            <button class="btn-ghost btn-sm" data-menu-toggle title="Join a continuation, e.g. the same table on the next page"><Icon name="rowBelow" class="size-3.5" />Join<Icon name="chevron" class="size-3" /></button>
-            <div id="joinmenu" class="menu hidden right-0 w-96"></div>
-          </div>
-          <div class="relative" data-menu>
-            <button class="btn-ghost btn-sm" data-menu-toggle><Icon name="layers" class="size-3.5" />More<Icon name="chevron" class="size-3" /></button>
-            <div class="menu hidden right-0 w-72">
-              <button id="tcopy" class="menu-item"><Icon name="copy" class="size-4 text-ink-500" />Copy for Spreadsheet</button>
-              <div class="border-t border-ink-100 my-1"></div>
-              <button id="tx-xlsx" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download Excel (.xlsx)</button>
-              <button id="tx-csv" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download CSV (.csv)</button>
-              <button id="tx-json" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download JSON (.json)</button>
-              <div data-need="editor" class="border-t border-ink-100 my-1"></div>
-              <button id="trextract" data-need="editor" class="menu-item"><Icon name="target" class="size-4 text-ink-500" />Extract Area Again</button>
-              <button id="treset" data-need="editor" class="menu-item"><Icon name="reset" class="size-4 text-ink-500" />Reset to Extracted Version</button>
-            </div>
-          </div>
-          <button id="tdel" data-need="editor" class="btn-ghost btn-sm" title="Mark as deleted; can be undone (Del)"><Icon name="trash" class="size-3.5" />Delete</button>
+  <!-- M: details of the open table: flag, title, notes -->
+  <div id="paneM" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-ink-50/60" role="region" aria-label="Table details">
+    <div class="h-9 shrink-0 flex items-center gap-md px-2.5 border-b border-ink-200 bg-ink-50">
+      <b id="mhead" class="text-[12.5px] text-ink-900 whitespace-nowrap">No table</b>
+      <span id="tbadge" class="text-[11.5px] text-ink-500 truncate"></span>
+      <span class="flex-1"></span>
+      <span id="savestate" role="status" class="text-[11.5px] text-ink-500 flex items-center gap-sm whitespace-nowrap"></span>
+    </div>
+    <div id="mempty" class="flex-1 grid place-items-center p-4 text-center text-[12.5px] text-ink-500">Choose a table in the list or on the PDF.</div>
+    <div id="mbody" class="hidden flex-1 min-h-0 overflow-y-auto px-2.5 py-2 flex flex-col gap-2.5 @[560px]:grid @[560px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @[560px]:items-start">
+      <div data-need="editor" class="@[560px]:col-span-2">
+        <div class="meta-label" id="flag-l">Status</div>
+        <div class="flex items-center border border-ink-300 h-7 bg-surface" role="radiogroup" aria-labelledby="flag-l">
+          <label class="flag-opt flex-1 justify-center" title="No decision yet"><input type="radio" name="flag" value="none" class="sr-only" />Unflagged</label>
+          <label class="flag-opt flex-1 justify-center" title="A real table, keep it (V)"><input type="radio" name="flag" value="valid" class="sr-only" /><Icon name="flagOk" class="size-3.5" />Valid</label>
+          <label class="flag-opt flex-1 justify-center" title="Not a table, e.g. a chart or a text box (X)"><input type="radio" name="flag" value="invalid" class="sr-only" /><Icon name="flagNo" class="size-3.5" />Not a Table</label>
         </div>
       </div>
-      <div id="tdeleted" role="status" class="hidden shrink-0 flex items-center gap-lg px-3 h-9 bg-red-50 border-b border-red-200 text-[12.5px] text-red-800">
-        <Icon name="trash" class="size-3.5" />Marked as deleted: hidden from exports and the Tables page.
-        <button id="trestore" class="ml-auto btn-line btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
-        <button id="tpurge" data-need="admin" class="btn-sm btn bg-red-700 border-red-700 text-white hover:bg-red-800">Delete Permanently…</button>
+      <div><label for="mtitle" class="meta-label">Title</label>
+        <textarea id="mtitle" rows="2" class="field w-full h-auto py-1 resize-none text-[13px] leading-snug" placeholder="Table title, for example Tabel 2.1 Panjang Jalan"></textarea></div>
+      <div class="flex-1 flex flex-col min-h-24"><label for="mnotes" class="meta-label">Notes</label>
+        <textarea id="mnotes" rows="3" class="field w-full flex-1 h-auto min-h-16 py-1 resize-none text-[12.5px] leading-snug" placeholder="Source and footnotes, for example Sumber: BPS"></textarea></div>
+      <dl id="minfo" class="grid grid-cols-[84px_1fr] gap-x-2 gap-y-0.5 text-[11.5px] @[560px]:col-span-2"></dl>
+    </div>
+    <div id="mfoot" class="hidden shrink-0 flex items-center gap-md px-2 py-1.5 border-t border-ink-200 bg-ink-50">
+      <div class="relative" data-menu data-need="editor">
+        <button class="btn-line btn-sm" data-menu-toggle title="Join a continuation, e.g. the same table on the next page"><Icon name="rowBelow" class="size-3.5" />Join<Icon name="chevron" class="size-3" /></button>
+        <div id="joinmenu" class="menu hidden left-0 bottom-full mb-1 w-96"></div>
       </div>
-      <div id="tjoin" data-need="editor" class="hidden shrink-0 flex flex-wrap items-center gap-lg px-3 py-1.5 bg-brand-50 border-b border-brand-100 text-[12.5px] text-ink-800"></div>
-      <div id="editor" class="flex-1 min-h-0"></div>
+      <div class="relative" data-menu>
+        <button class="btn-line btn-sm" data-menu-toggle><Icon name="layers" class="size-3.5" />More<Icon name="chevron" class="size-3" /></button>
+        <div class="menu hidden left-0 bottom-full mb-1 w-72">
+          <button id="tcopy" class="menu-item"><Icon name="copy" class="size-4 text-ink-500" />Copy for Spreadsheet</button>
+          <div class="border-t border-ink-100 my-1"></div>
+          <button id="tx-xlsx" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download Excel (.xlsx)</button>
+          <button id="tx-csv" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download CSV (.csv)</button>
+          <button id="tx-json" class="menu-item"><Icon name="download" class="size-4 text-ink-500" />Download JSON (.json)</button>
+          <div data-need="editor" class="border-t border-ink-100 my-1"></div>
+          <button id="trextract" data-need="editor" class="menu-item"><Icon name="target" class="size-4 text-ink-500" />Extract Area Again</button>
+          <button id="treset" data-need="editor" class="menu-item"><Icon name="reset" class="size-4 text-ink-500" />Reset to Extracted Version</button>
+        </div>
+      </div>
+      <span class="flex-1"></span>
+      <button id="tdel" data-need="editor" class="btn-line btn-sm text-red-700 hover:!border-red-300" title="Mark as deleted; can be undone (Del)"><Icon name="trash" class="size-3.5" />Delete</button>
+    </div>
+  </div>
+
+  <!-- G: the cells -->
+  <div id="paneG" class="@container flex-1 min-w-0 min-h-0 flex flex-col bg-surface" role="region" aria-label="Table cells">
+    <div id="tdeleted" role="status" class="hidden shrink-0 flex items-center gap-lg px-3 h-9 bg-red-50 border-b border-red-200 text-[12.5px] text-red-800">
+      <Icon name="trash" class="size-3.5" />Marked as deleted: hidden from exports and the Tables page.
+      <button id="trestore" class="ml-auto btn-line btn-sm"><Icon name="restore" class="size-3.5" />Restore</button>
+      <button id="tpurge" data-need="admin" class="btn-sm btn bg-red-700 border-red-700 text-white hover:bg-red-800">Delete Permanently…</button>
+    </div>
+    <div id="tjoin" data-need="editor" class="hidden shrink-0 flex flex-wrap items-center gap-lg px-3 py-1.5 bg-brand-50 border-b border-brand-100 text-[12.5px] text-ink-800"></div>
+    <div id="editor" class="flex-1 min-h-0"></div>
   </div>
   </div>
 </Layout>
@@ -149,7 +179,7 @@ import Icon from '../components/Icon.astro';
   import { TableEditor, type EditorChange } from '../lib/editor';
   import { $, esc, h, ago, toast, toastError, plural, fmtBytes, fmtDate, parsePages, debounce, confirmDialog, initMenus, KIND_LABEL, contextMenu, isMenuKey, type MenuItem } from '../lib/ui';
   import { icon } from '../lib/icons';
-  import { Layout, LAYOUTS } from '../lib/layout';
+  import { Layout, LAYOUTS, type PaneId } from '../lib/layout';
   import { getSettings } from '../lib/settings';
   import { canEdit, me } from '../lib/auth';
 
@@ -184,26 +214,39 @@ import Icon from '../components/Icon.astro';
     onPart: (tid, k) => revealPart(tid, k),
     onPage: (p) => { $<HTMLInputElement>('#pgin').value = String(p); markRail(); layout?.refreshTabs(); saveDocState(); if (filt.page) renderList(); },
   });
-  const layout = new Layout($('#work'), { A: $('#paneA'), B: $('#paneB'), C: $('#paneC') }, (p) => {
+  const layout = new Layout($('#work'), { A: $('#paneA'), B: $('#paneB'), M: $('#paneM'), G: $('#paneG') }, (p) => {
     if (p === 'A') return `PDF${doc ? ` · p${viewer.current}` : ''}`;
     if (p === 'B') return `Tables (${tables.filter((t) => !t.deleted).length})`;
     const t = tables.find((x) => x.id === selected);
     return t ? `Editor · ${label(t)}` : 'Editor';
   }, () => renderLayoutMenu());
+
+  /** mini wireframe of each preset (no letters), drawn in the menu */
+  const LAYOUT_ICON: Record<string, string> = {
+    standard: '<rect class="f" x="3" y="3" width="8" height="20"/><rect class="f" x="13" y="3" width="12" height="20"/><rect class="f" x="27" y="3" width="8" height="20"/>',
+    stacked: '<rect class="f" x="3" y="3" width="18" height="20"/><rect class="f" x="23" y="3" width="12" height="9"/><rect class="f" x="23" y="14" width="12" height="9"/>',
+    'right-tabs': '<rect class="f" x="3" y="3" width="18" height="20"/><path d="M23 7V3h5v4"/><rect class="f" x="23" y="7" width="12" height="16"/>',
+    'list-tabs': '<rect class="f" x="3" y="3" width="9" height="20"/><path d="M5 7h5M5 11h5M5 15h5M5 19h5"/><path d="M14 7V3h6v4"/><rect class="f" x="14" y="7" width="21" height="16"/>',
+  };
   function renderLayoutMenu() {
     const eff = layout.effective();
-    $('#layoutmenu').innerHTML = `<div class="px-3 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">a = PDF, b = table list, c = editor</div>`
-      + LAYOUTS.map((l) => `<button data-layout="${l.id}" role="menuitemradio" aria-checked="${l.id === layout.id}" class="menu-item ${l.id === layout.id ? 'font-semibold' : ''}">
-        <span class="w-4">${l.id === layout.id ? icon('check', 'size-3.5 text-brand-600') : ''}</span>
-        <span class="flex-1">${l.label}</span><span class="font-mono text-[11px] text-ink-500">${l.hint}</span></button>`).join('')
-      + (eff !== layout.id ? `<div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11.5px] text-ink-700">The window is narrow, so “${LAYOUTS.find((l) => l.id === eff)!.label}” is used until it is wider.</div>` : '')
-      + `<div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-500">Drag a divider to resize it. Double-click a divider to reset it. Alt+1, 2, 3 jump to the PDF, list and editor.</div>`;
+    const narrow = !layout.focusMode && eff !== layout.id;
+    $('#layoutmenu').innerHTML = `<div class="px-3.5 pt-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.08em] text-ink-500" id="lp-h">Layout presets</div>
+      <div role="group" aria-labelledby="lp-h">${LAYOUTS.map((l) => `<button data-layout="${l.id}" role="menuitemradio" aria-checked="${l.id === layout.id}" class="lp-opt">
+        <svg width="38" height="26" viewBox="0 0 38 26" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x=".5" y=".5" width="37" height="25"/>${LAYOUT_ICON[l.id]}</svg>
+        <span class="flex-1 min-w-0">${l.label}<span class="block text-[11px] font-normal text-ink-500">${l.hint}</span></span>
+        <span class="w-4">${l.id === layout.id ? icon('check', 'size-4') : ''}</span></button>`).join('')}</div>
+      <div class="border-t border-ink-200 my-1"></div>
+      <button data-focus role="menuitemcheckbox" aria-checked="${layout.focusMode}" class="lp-opt !font-normal !bg-transparent !text-ink-800"><span class="lp-switch" aria-hidden="true"></span>
+        <span class="flex-1">Single Pane (Focus Mode)<span class="block text-[11px] text-ink-500">One pane at a time, in tabs</span></span><span class="kbd">F</span></button>
+      ${narrow ? `<div class="px-3.5 py-1.5 text-[11.5px] text-ink-700 bg-orange-50 border-t border-ink-200">The window is narrow, so “${LAYOUTS.find((l) => l.id === eff)?.label ?? 'tabs'}” is used until it is wider.</div>` : ''}
+      <div class="px-3.5 py-2 bg-ink-50 border-t border-ink-200 text-[11px] text-ink-500 flex items-center gap-md">${icon('dot', 'size-3')}Drag dividers to resize. Double-click to reset. Alt+1, 2, 3, 4 jump to the PDF, list, details and cells.</div>`;
   }
   $('#layoutmenu').addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-layout]');
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-layout],[data-focus]');
     if (!b) return;
-    $('#layoutmenu').classList.add('hidden');
-    layout.apply(b.dataset.layout!);
+    if (b.dataset.layout) { $('#layoutmenu').classList.add('hidden'); layout.focusMode = false; localStorage.setItem('tdp.layout2:focus', '0'); layout.apply(b.dataset.layout); }
+    else layout.setFocusMode(!layout.focusMode);
   });
   layout.apply();
 
@@ -215,7 +258,7 @@ import Icon from '../components/Icon.astro';
     const page = k < 0 ? t.page : t.parts[k]!.page;
     if (selected !== tid) { picked.clear(); picked.add(tid); select(tid, false); }
     pendingReveal = { id: tid, page };
-    layout.focus('C');
+    layout.focus('G');
     requestAnimationFrame(() => editor.reveal(page));
   }
 
@@ -338,18 +381,55 @@ import Icon from '../components/Icon.astro';
     if (c.rows) t.rows = c.rows.map((r) => [...r]);
     if (c.merges) t.merges = c.merges.map((m) => [...m] as typeof m);
     if (c.header_rows !== undefined) t.header_rows = c.header_rows;
-    if (c.title !== undefined) t.title = c.title;
-    if (c.notes !== undefined) t.notes = c.notes;
     if (c.decimal_sep !== undefined) t.decimal_sep = c.decimal_sep;
     const patch: TablePatch = { checkpoint: c.checkpoint };
     if (c.decimal_sep !== undefined) patch.decimal_sep = c.decimal_sep;
     if (c.rows) patch.rows = t.rows;
     if (c.merges) patch.merges = t.merges;
     if (c.header_rows !== undefined) patch.header_rows = c.header_rows;
-    if (c.title !== undefined) { patch.title = c.title; renderList(); }
-    if (c.notes !== undefined) patch.notes = c.notes;
     queue(selected, patch, !!c.checkpoint);
   });
+
+  // ------------------------------------------------------------ details pane: title and notes
+  for (const key of ['title', 'notes'] as const) {
+    const ta = $<HTMLTextAreaElement>(key === 'title' ? '#mtitle' : '#mnotes');
+    const grow = () => { if (key === 'title') { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 2, 96)}px`; } };
+    ta.addEventListener('input', grow);
+    ta.addEventListener('change', () => {
+      const t = tables.find((x) => x.id === selected);
+      if (!t || ta.readOnly) return;
+      const v = ta.value.trim();
+      if (v === (t[key] ?? '')) return;
+      t[key] = v;
+      queue(t.id, { [key]: v });
+      if (key === 'title') renderList();
+    });
+    if (key === 'title') ta.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ta.blur(); } });
+  }
+  function fillMeta(t: Table | undefined) {
+    $('#mempty').classList.toggle('hidden', !!t);
+    $('#mbody').classList.toggle('hidden', !t);
+    $('#mfoot').classList.toggle('hidden', !t);
+    $('#mfoot').classList.toggle('flex', !!t);
+    if (!t) { $('#mhead').textContent = 'No table'; $('#tbadge').textContent = ''; return; }
+    const ro = t.deleted || !canEdit();
+    for (const [sel, v] of [['#mtitle', t.title], ['#mnotes', t.notes ?? '']] as const) {
+      const ta = $<HTMLTextAreaElement>(sel);
+      ta.readOnly = ro;
+      if (document.activeElement !== ta) { ta.value = v; ta.dispatchEvent(new Event('input')); }
+    }
+    const w = width(t);
+    $('#mhead').textContent = `Table ${label(t)}`;
+    const moved = t.original_bbox && t.bbox.some((v, i) => Math.abs(v - t.original_bbox![i]!) > 0.5);
+    $('#tbadge').innerHTML = `· page ${t.page} · ${w} × ${t.rows.length}${t.edited ? ` · <span class="text-accent-600 font-medium">edited</span>` : ''}${moved ? ' · area moved' : ''}`;
+    const v = t.validated_at ? `${fmtDate(t.validated_at)}, ${new Date(t.validated_at * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : '';
+    const rows: [string, string][] = [['Found by', esc(ENGINE_NAME[t.engine] ?? t.engine) + (t.origin === 'region' ? ' · drawn' : t.origin === 'manual' ? ' · by hand' : '')]];
+    if (canEdit()) {
+      if (t.status !== 'none') rows.push([t.status === 'valid' ? 'Validated by' : 'Flagged by', `${esc(t.validated_by_name ?? 'not recorded')}${v ? ` · ${v}` : ''}`]);
+      if (t.updated_by_name) rows.push(['Last change', `${esc(t.updated_by_name)}, ${ago(t.updated_at)}`]);
+    }
+    $('#minfo').innerHTML = rows.map(([k, v]) => `<dt class="text-ink-500">${k}</dt><dd class="text-ink-800 min-w-0 truncate">${v}</dd>`).join('');
+  }
   editor.onShowPage = (page) => {
     const t = tables.find((x) => x.id === selected);
     if (!t) return;
@@ -376,6 +456,7 @@ import Icon from '../components/Icon.astro';
     viewer.setActive(selected);
     renderList();
     renderRail();
+    renderMeta();
     renderFilterMenu();
     $('#tcount').textContent = String(tables.filter((t) => !t.deleted).length);
     layout.refreshTabs();
@@ -393,6 +474,13 @@ import Icon from '../components/Icon.astro';
     for (const id of [...picked]) if (!tables.some((t) => t.id === id)) picked.delete(id);
     const list = visible();
     $('#tlist').innerHTML = list.map((t) => {
+      return rowHTML(t);
+    }).join('') || emptyList();
+    $('#tlist').setAttribute('aria-activedescendant', focusId && $('#tlist').querySelector(`#row-${focusId}`) ? `row-${focusId}` : '');
+  }
+
+  function rowHTML(t: Table) {
+    {
       const idx = tables.filter((x) => x.page === t.page).indexOf(t) + 1;
       const w = Math.max(0, ...t.rows.map((r) => r.length));
       const s = stateOf(t);
@@ -423,12 +511,15 @@ import Icon from '../components/Icon.astro';
         <span class="flex-1 min-w-0 truncate">${c.part < 0 ? 'First part' : `Part ${c.k}`} · ${c.size}${c.skipped ? ` <span class="text-ink-500">(${plural(c.skipped, 'repeated header row')} dropped)</span>` : ''}</span>
         ${c.part >= 0 && canEdit() ? `<button data-unjoin-part="${t.id}" data-pidx="${c.part}" class="btn-ghost btn-sm !h-6 text-ink-600" title="Separate this part (and the parts after it) again">${icon('splitCells', 'size-3')}Unjoin</button>` : ''}
       </div>`).join('');
-    }).join('') || `<div class="px-4 py-8 text-center text-[12.5px] text-ink-600">
+    }
+  }
+
+  function emptyList() {
+    return `<div class="px-4 py-8 text-center text-[12.5px] text-ink-600">
         <div class="mx-auto grid place-items-center size-10 bg-ink-50 border border-ink-200 text-ink-400 mb-2">${icon('table', 'size-5')}</div>
         ${tables.length ? `<p>No tables match the filter.</p><button data-empty="filter" class="btn-line btn-sm mt-3">Show All Tables</button>`
           : !canEdit() ? '<p>No table of this document has been flagged valid yet.</p>'
           : `<p>No tables found yet.</p><button data-empty="run" class="btn-primary btn-sm mt-3">${icon('play', 'size-3.5')}Get All Tables</button>`}</div>`;
-    $('#tlist').setAttribute('aria-activedescendant', focusId && $('#tlist').querySelector(`#row-${focusId}`) ? `row-${focusId}` : '');
   }
 
   function clickRow(e: MouseEvent | KeyboardEvent, id: string) {
@@ -469,7 +560,7 @@ import Icon from '../components/Icon.astro';
   }
 
   async function joinMany(ids: string[]) {
-    for (const id of ids) if (pending.has(id)) await flush(id);
+    await flushAll();
     try {
       const r = await api.joinMany(ids);
       picked.clear(); picked.add(r.id);
@@ -531,7 +622,7 @@ import Icon from '../components/Icon.astro';
   }
 
   function openInEditor() {
-    layout.focus('C');
+    layout.focus('G');
     requestAnimationFrame(() => editor.focusCell(0, 0));
   }
 
@@ -541,9 +632,9 @@ import Icon from '../components/Icon.astro';
     const valid = new Set(tables.filter((t) => !t.deleted && t.status === 'valid').map((t) => t.page));
     $('#rail').innerHTML = Array.from({ length: doc.page_count }, (_, i) => {
       const n = i + 1, c = counts.get(n) ?? 0;
-      return `<button data-p="${n}" class="w-full h-7 flex items-center justify-between px-2 tabular-nums
+      return `<button data-p="${n}" title="Page ${n}${c ? ` · ${plural(c, 'table')}${valid.has(n) ? ', valid ones' : ''}` : ''}" class="w-full h-7 flex items-center justify-between px-2 tabular-nums
         ${c ? 'text-ink-900 font-medium' : 'text-ink-500'} hover:bg-ink-50">
-        <span>${n}</span>${c ? `<span class="min-w-4 h-4 px-1 grid place-items-center ${valid.has(n) ? 'bg-emerald-600' : 'bg-brand-600'} text-white text-[10px]">${c}</span>` : ''}</button>`;
+        <span>${n}</span>${c ? `<span class="min-w-4 h-4 px-1 grid place-items-center ${valid.has(n) ? 'bg-emerald-700' : 'bg-ink-600'} text-white text-[10px]">${c}</span>` : ''}</button>`;
     }).join('');
     markRail();
   }
@@ -551,17 +642,17 @@ import Icon from '../components/Icon.astro';
     const cur = viewer.current;
     $('#rail').querySelectorAll<HTMLElement>('[data-p]').forEach((b) => {
       const on = +b.dataset.p! === cur;
-      b.classList.toggle('bg-ink-100', on);
-      b.classList.toggle('shadow-[inset_2px_0_0_var(--color-brand-600)]', on);
+      b.classList.toggle('bg-ink-200', on);
+      b.classList.toggle('font-bold', on);
+      b.classList.toggle('shadow-[inset_3px_0_0_var(--color-ink-800)]', on);
+      on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current');
       if (on) b.scrollIntoView({ block: 'nearest' });
     });
   }
 
   function renderBar(t: Table) {
     document.querySelectorAll<HTMLInputElement>('input[name="flag"]').forEach((r) => { r.checked = r.value === t.status; r.disabled = t.deleted; });
-    const moved = t.original_bbox && t.bbox.some((v, i) => Math.abs(v - t.original_bbox![i]!) > 0.5);
-    $('#tbadge').innerHTML = `Page ${t.page} · ${esc(ENGINE_NAME[t.engine] ?? t.engine)}${t.edited ? ` · <span class="text-accent-600 font-medium inline-flex items-center gap-sm">${icon('edit', 'size-3')}edited</span>` : ''}${moved ? ' · area moved' : ''}`
-      + (t.updated_by_name ? ` · <span title="Last change">${esc(t.updated_by_name)}, ${ago(t.updated_at)}</span>` : '');
+    fillMeta(t);
     $('#tdeleted').classList.toggle('hidden', !t.deleted);
     $('#tdel').classList.toggle('hidden', t.deleted);
     const noArea = !(t.bbox[2] - t.bbox[0] > 0) || !!t.parts?.length;
@@ -593,8 +684,8 @@ import Icon from '../components/Icon.astro';
     if (tid && !picked.has(tid)) { picked.clear(); picked.add(tid); }
     if (tid && picked.size <= 1) anchorId = tid; // shift-click ranges start from the open table
     const t = tables.find((x) => x.id === tid);
-    $('#tbar').classList.toggle('hidden', !t);
     if (!t) {
+      fillMeta(undefined);
       $('#tdeleted').classList.add('hidden');
       $('#tjoin').classList.add('hidden');
       $('#editor').innerHTML = `<div class="h-full grid place-items-center text-center px-8">
@@ -687,8 +778,10 @@ import Icon from '../components/Icon.astro';
     const order = tables.filter((x) => !x.deleted);
     const next = order[order.indexOf(t) + 1];
     if (!next || next.page > lastPage(t) + 1) return null;
-    const no = tableNo(t.title);
-    const sameNo = !!no && no === tableNo(next.title);
+    const no = tableNo(t.title), nextNo = tableNo(next.title);
+    // "Tabel 2 …" and "Tabel 3 …" are two tables, even when they repeat the same header
+    if (no && nextNo && no !== nextNo) return null;
+    const sameNo = !!no && no === nextNo;
     const marked = isLanjutan(next.title) || sameNo;
     if (sideBySide(t, next) && (marked || !next.title))
       return { next, skip: 0, cols: true, why: `${isLanjutan(next.title) ? 'titled “Lanjutan”, ' : ''}same rows, more columns` };
@@ -698,6 +791,113 @@ import Icon from '../components/Icon.astro';
       : !next.title && sameCols ? 'untitled, same columns' : sameNo || (next.title && next.title === t.title) ? 'same table number' : '';
     return why && (sameCols || skip) ? { next, skip, why, cols: false } : null;
   }
+  // ------------------------------------------------------------ continuations: offer to join them (automatically or one by one)
+  /** chains of tables that continue each other, in reading order: [parent, next, next, …]. Tables flagged
+   *  "not a table" are left out. Joining never changes a flag: validating stays a manual step. */
+  function chains(): Table[][] {
+    const out: Table[][] = [];
+    const order = tables.filter((x) => !x.deleted && x.status !== 'invalid');
+    let cur: Table[] | null = null;
+    for (const t of order) {
+      const c = t.status === 'invalid' ? null : continuation(t);
+      const next = c && c.next.status !== 'invalid' ? c.next : null;
+      if (cur && cur.at(-1) === t) { if (next) cur.push(next); else cur = null; continue; }
+      if (next) { cur = [t, next]; out.push(cur); }
+    }
+    return out;
+  }
+  const offerKey = () => `tdp.joinoffer.${id}`;
+  const sig = (cs: Table[][]) => cs.map((c) => c.map((t) => t.id).join('+')).sort().join(',');
+  let review: { list: Table[][]; i: number } | null = null;
+
+  /** show the offer when there are continuations, unless they were dismissed for this document (and nothing new came) */
+  function checkJoinOffer(force = false) {
+    if (!canEdit()) return;
+    const cs = chains();
+    const dismissed = localStorage.getItem(offerKey());
+    if (!cs.length || (!force && dismissed === sig(cs))) { if (!review) $('#joinoffer').classList.replace('flex', 'hidden'); return; }
+    if (review) return renderReview();
+    const n = cs.reduce((a, c) => a + c.length - 1, 0);
+    const ex = cs[0]!;
+    $('#joinoffer').innerHTML = `${icon('rowBelow', 'size-4 text-brand-600')}
+      <span class="flex-1 min-w-64"><b>${plural(n, 'table continues', 'tables continue')} the table before ${n === 1 ? 'it' : 'them'}</b>
+      (${plural(cs.length, 'group')}, for example ${label(ex[0]!)} + ${ex.slice(1).map(label).join(', ')}: ${esc(continuation(ex[0]!)?.why ?? '')}).
+      Join them? Flags are not changed: you still validate each table yourself.</span>
+      <button data-offer="review" class="btn-line btn-sm">Review One by One</button>
+      <button data-offer="auto" class="btn-primary btn-sm">${icon('wand', 'size-3.5')}Join All Automatically</button>
+      <button data-offer="later" class="btn-ghost btn-sm" title="Ask again next time this document is opened">Not Now</button>
+      <button data-offer="never" class="btn-ghost btn-sm" title="Do not ask again for this document, unless new continuations are found">Don't Ask Again</button>`;
+    $('#joinoffer').classList.replace('hidden', 'flex');
+  }
+
+  async function joinAll(cs: Table[][]) {
+    await flushAll();
+    const done: { parent: string; first: string }[] = [];
+    let failed = 0;
+    for (const c of cs) {
+      try { await api.joinMany(c.map((t) => t.id)); done.push({ parent: c[0]!.id, first: c[1]!.id }); }
+      catch { failed++; }
+    }
+    review = null;
+    $('#joinoffer').classList.replace('flex', 'hidden');
+    await loadTables();
+    const n = cs.filter((_, i) => i < cs.length).reduce((a, c) => a + c.length - 1, 0);
+    toast(`Joined ${plural(done.length, 'group')} (${plural(n, 'continuation')})${failed ? `, ${failed} could not be joined` : ''}. Check and flag them yourself.`, failed ? 'error' : 'ok', {
+      action: { label: 'Undo', run: async () => { for (const d of done) await api.unjoin(d.parent, d.first).catch(() => null); await loadTables(); checkJoinOffer(true); } },
+    });
+  }
+
+  /** manual: one group at a time, shown in the PDF and the editor */
+  function renderReview() {
+    const r = review!;
+    // groups already joined or changed meanwhile are skipped
+    while (r.i < r.list.length && r.list[r.i]!.some((t) => !tables.some((x) => x.id === t.id && !x.deleted))) r.i++;
+    if (r.i >= r.list.length) {
+      review = null;
+      $('#joinoffer').innerHTML = `${icon('check', 'size-4 text-emerald-600')}<span class="flex-1">All suggested continuations reviewed. Flag the tables when you have checked them.</span>
+        <button data-offer="close" class="btn-ghost btn-sm">Close</button>`;
+      localStorage.setItem(offerKey(), sig(chains()));
+      return;
+    }
+    const c = r.list[r.i]!;
+    const why = continuation(c[0]!)?.why ?? '';
+    $('#joinoffer').innerHTML = `${icon('rowBelow', 'size-4 text-brand-600')}
+      <span class="font-semibold whitespace-nowrap">Suggestion ${r.i + 1} of ${r.list.length}</span>
+      <span class="flex-1 min-w-64">${c.map((t) => `<b>${label(t)}</b> <span class="text-ink-600">${esc((t.title || 'Untitled').slice(0, 50))}</span>`).join(' + ')}${why ? ` <span class="text-ink-500">(${esc(why)})</span>` : ''}</span>
+      <button data-offer="join" class="btn-primary btn-sm">Join ${plural(c.length, 'Table')}</button>
+      <button data-offer="skip" class="btn-line btn-sm">Skip</button>
+      <button data-offer="rest" class="btn-ghost btn-sm">Join All Remaining (${r.list.length - r.i})</button>
+      <button data-offer="stop" class="btn-ghost btn-sm">Stop</button>`;
+    $('#joinoffer').classList.replace('hidden', 'flex');
+    if (selected !== c[0]!.id) { picked.clear(); picked.add(c[0]!.id); select(c[0]!.id, true); }
+  }
+
+  $('#joinoffer').addEventListener('click', async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-offer]');
+    if (!b) return;
+    const a = b.dataset.offer!;
+    if (a === 'auto') { b.disabled = true; await joinAll(chains()); }
+    else if (a === 'review') { review = { list: chains(), i: 0 }; renderReview(); }
+    else if (a === 'later' || a === 'close') $('#joinoffer').classList.replace('flex', 'hidden');
+    else if (a === 'never') { localStorage.setItem(offerKey(), sig(chains())); $('#joinoffer').classList.replace('flex', 'hidden'); }
+    else if (a === 'stop') { review = null; $('#joinoffer').classList.replace('flex', 'hidden'); }
+    else if (a === 'skip') { review!.i++; renderReview(); }
+    else if (a === 'rest') { b.disabled = true; await joinAll(review!.list.slice(review!.i)); }
+    else if (a === 'join') {
+      b.disabled = true;
+      const c = review!.list[review!.i]!;
+      try {
+        await flushAll();
+        const r = await api.joinMany(c.map((t) => t.id));
+        expanded.add(r.id); saveExpanded();
+        await loadTables();
+        toast(`Joined ${label(c[0]!)} with ${c.slice(1).map(label).join(', ')}`, 'ok', { action: { label: 'Undo', run: () => unjoinQuiet(c[0]!.id, c[1]!.id) } });
+      } catch (er) { toastError(er); }
+      review!.i++;
+      renderReview();
+    }
+  });
+
   const partSize = (p: Table['parts'][number]) => p.mode === 'columns' ? plural(p.cols ?? 0, 'column') : plural(p.rows, 'row');
 
   function renderJoin(t: Table) {
@@ -737,9 +937,16 @@ import Icon from '../components/Icon.astro';
       <div class="border-t border-ink-100 mt-1 px-3 py-1.5 text-[11px] text-ink-600">Below: rows are added at the end and a repeated header is dropped. As columns: a table split across pages by width; rows are matched on the first (label) column, which is not repeated. To split them again, use Unjoin.</div>`;
   }
 
+  /** a join reads the cells from the server: save every edit first (also of other tables in the chain) */
+  async function flushAll() {
+    saveSoon.cancel();
+    (document.activeElement as HTMLElement | null)?.blur?.(); // a cell being typed in
+    for (const id of [...pending.keys()]) await flush(id);
+    for (const p of [...inflight.values()]) await p;
+  }
+
   async function doJoin(parentId: string, childId: string, mode: JoinMode = 'auto') {
-    if (pending.has(parentId)) await flush(parentId);
-    if (pending.has(childId)) await flush(childId);
+    await flushAll();
     try {
       const r = await api.join(parentId, childId, null, mode);
       expanded.add(parentId); saveExpanded();
@@ -851,6 +1058,7 @@ import Icon from '../components/Icon.astro';
     await loadTables();
     if (job.status === 'done') {
       toast(`Found ${plural(job.found, 'table')} on ${plural(job.total, 'page')}. Flagged, edited and deleted tables were kept.`, 'ok');
+      checkJoinOffer(true);
       if (job.error) toast(`Some pages could not be read: ${job.error}`, 'error', { action: { label: 'Retry', run: () => runJob(job?.pages ?? null) } });
       if (!selected && reselect) {
         const r = reselect;
@@ -895,7 +1103,7 @@ import Icon from '../components/Icon.astro';
     if (on && viewer.textMode) setTextMode(false);
     viewer.setDrawMode(on);
     // HIG: no checkable buttons, the label says what happens next
-    $('#drawlabel').textContent = on ? 'Stop Drawing' : 'Draw Table Area';
+    $('#drawlabel').textContent = on ? 'Stop Drawing' : 'Draw Area';
     $('#draw').title = on ? 'Stop drawing table areas (Esc)' : 'Drag a rectangle over a table to extract only that area (R)';
     $('#drawhint').classList.toggle('hidden', !on);
   }
@@ -911,13 +1119,10 @@ import Icon from '../components/Icon.astro';
     }
     document.title = `${doc.title} · Tabel dari PDF`;
     $('#doc-h1').textContent = doc.title;
-    const kind = doc.source === 'bps' ? doc.meta.kind : 'upload';
-    $('#kind').textContent = KIND_LABEL[kind] ?? kind;
     $<HTMLInputElement>('#title').value = doc.title;
     $('#title').title = doc.title;
     applyRole();
-    $('#meta').innerHTML = [plural(doc.page_count, 'page'), fmtBytes(doc.size), doc.meta.date ? `released ${fmtDate(doc.meta.date)}` : ''].filter(Boolean).join(' · ')
-      + (doc.meta.pdf ? ` · <a class="text-brand-600 underline" href="${esc(doc.meta.pdf)}" target="_blank" rel="noopener">Original on BPS</a>` : '');
+    renderMeta();
     $('#pgcount').textContent = `of ${doc.page_count}`;
     $<HTMLSelectElement>('#engine').innerHTML = engines.map((e) =>
       `<option value="${e.id}" ${e.available ? '' : 'disabled'} title="${esc(e.note || e.description)}">${esc(e.label)}${e.available ? '' : ' (not installed)'}</option>`).join('');
@@ -951,8 +1156,21 @@ import Icon from '../components/Icon.astro';
       if (p) viewer.scrollToPage(p);
     }
 
+    checkJoinOffer();
     const last = doc.jobs?.[0];
     if (last && (last.status === 'running' || last.status === 'queued')) { job = last; pollJob(); }
+  }
+
+  /** chips in the header: kind, pages, size, year, tables */
+  function renderMeta() {
+    if (!doc) return;
+    const kind = doc.source === 'bps' ? doc.meta.kind : 'upload';
+    const chip = (t: string, title = '') => `<span class="chip h-[22px] border-ink-300 bg-surface text-ink-700" ${title ? `title="${esc(title)}"` : ''}>${t}</span>`;
+    const live = tables.filter((t) => !t.deleted && t.status !== 'invalid');
+    $('#meta').innerHTML = chip(esc(KIND_LABEL[kind] ?? kind)) + chip(plural(doc.page_count, 'page')) + `<span class="hidden 2xl:contents">${chip(fmtBytes(doc.size))}</span>`
+      + (doc.year ? chip(`Year ${doc.year}`, 'Publication year') : '')
+      + chip(`${plural(live.length, 'table')} · ${tables.filter((t) => !t.deleted && t.status === 'valid').length} valid`)
+      + (doc.meta.pdf ? `<a class="text-[12px] text-brand-600 hover:underline ml-1 hidden xl:inline" href="${esc(doc.meta.pdf)}" target="_blank" rel="noopener">Original on BPS ↗</a>` : '');
   }
 
   /** visitors who are not logged in: the document is read only */
@@ -961,6 +1179,8 @@ import Icon from '../components/Icon.astro';
     $<HTMLInputElement>('#title').readOnly = !ed;
     $('#title').title = ed ? 'Document title (click to rename)' : doc?.title ?? '';
     viewer.readonly = !ed;
+    $<HTMLTextAreaElement>('#mtitle').readOnly = !ed;
+    $<HTMLTextAreaElement>('#mnotes').readOnly = !ed;
     if (!ed) { setDraw(false); filt.states = ['none', 'valid', 'invalid']; }
   }
   me().then(() => { applyRole(); if (doc) refresh(); });
@@ -1107,11 +1327,12 @@ import Icon from '../components/Icon.astro';
 
   // pane / tab shortcuts work everywhere (HIG: standard tab-switching shortcuts)
   addEventListener('keydown', (e) => {
-    if (e.altKey && ['1', '2', '3'].includes(e.key)) {
+    if (e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
       e.preventDefault();
-      const p = (['A', 'B', 'C'] as const)[+e.key - 1]!;
+      const p = (['A', 'B', 'M', 'G'] as const)[+e.key - 1]!;
       layout.focus(p);
-      ({ A: () => $('#scroller').focus(), B: () => $('#tlist').focus(), C: () => (selected ? editor.focusCell(0, 0) : $('#editor').focus()) })[p]();
+      ({ A: () => $('#scroller').focus(), B: () => $('#tlist').focus(), M: () => (selected ? $('#mtitle').focus() : $('#paneM').focus()),
+        G: () => (selected ? editor.focusCell(0, 0) : $('#editor').focus()) } as Record<PaneId, () => void>)[p]();
     } else if (e.ctrlKey && (e.key === 'PageDown' || e.key === 'PageUp')) {
       if (layout.cycleTab(e.key === 'PageDown' ? 1 : -1)) e.preventDefault();
     }
@@ -1125,6 +1346,7 @@ import Icon from '../components/Icon.astro';
     if ((e.key === 'r' || e.key === 'R') && canEdit()) setDraw(!viewer.drawMode);
     else if (!e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'T')) setTextMode(!viewer.textMode);
     else if (e.key === 'Escape') { setDraw(false); setTextMode(false); }
+    else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) layout.setFocusMode(!layout.focusMode);
     else if (e.key === '+' || e.key === '=') { viewer.setZoom(viewer.zoom * 1.2); zoomLabel(); }
     else if (e.key === '-') { viewer.setZoom(viewer.zoom / 1.2); zoomLabel(); }
     else if (selected && canEdit() && !e.ctrlKey && !e.altKey && (e.key === 'v' || e.key === 'x')) { const s = cur()?.status; const want = e.key === 'v' ? 'valid' : 'invalid'; setFlag(s === want ? 'none' : want); }

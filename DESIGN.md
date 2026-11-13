@@ -27,12 +27,16 @@ Colors carry meaning. Use them only for that meaning.
 | Destructive / error | `red-*` | delete buttons, error toasts, deleted boxes |
 | Valid | `emerald-*` (green) | "Valid" flag, success toasts |
 | Neutral | `ink-50`…`ink-900` | text, borders, backgrounds |
-| Surfaces | `--color-surface`, `--color-header` | panels, menus, app header |
+| Surfaces | `--color-surface`, `--color-header` | panels, menus |
+| Top bar | `--nav-bg`, `--nav-hover`, `--nav-active`, `--nav-text`, `--nav-badge` | the navy strip at the top (darker navy in the dark scheme) |
 
+- Pressed filter chips (Tables status, Queue status) are a blue fill with white text: they are a selection.
 - Selection is a **fill**, focus is an **outline** (`:focus-visible`, 2px `brand-500`), so the two never look alike.
 - Orange is not an action color: there is no orange button. Primary buttons are `btn-primary` (blue).
-- **Dark scheme** follows `prefers-color-scheme`: the `ink`, `brand`, `accent`, `red`, `emerald` scales and the surface
-  tokens are redefined in the dark media query. Use tokens, never hard-coded hex values, so both schemes work.
+- **Dark scheme** follows `prefers-color-scheme`, unless Settings → Appearance picks Light or Dark (`html[data-theme]`,
+  set before the first paint): the `ink`, `brand`, `accent`, `red`, `emerald` scales, the surface and the `--nav-*`
+  tokens are redefined for dark. The light/dark switch lives in Settings only, not in the top bar.
+  Use tokens, never hard-coded hex values, so both schemes work.
   Overlays (menus, tooltips, toasts) have a contrasting border so they stay visible on dark backgrounds.
 - Text must meet WCAG AA contrast in both schemes (checked by `mise run check:a11y`).
 
@@ -72,6 +76,13 @@ Utilities defined in `global.css`:
 | `kbd` | shortcut hints |
 | `skeleton` | loading placeholders |
 | `.flag-opt` | segmented radio for the flag (Unflagged · Valid · Not a Table) |
+| `.count-badge` | counts next to tree items and filters |
+| `.src-tag` (`.is-upload`) | where a document comes from: `BPS` outlined, `UPLOAD` filled |
+| `.tag-year`, `.tag-chip`, `.tag-add`, `.tag-miss` | publication year, tags, "+ Tag", "Publication year missing" (dashed) |
+| `.splitter` | the vertical divider of resizable panes (`lib/split.ts`) |
+| `.lp-opt`, `.lp-switch` | Layout presets menu: option with a mini wireframe icon, and the Focus Mode switch |
+| `.meta-label` | small uppercase labels in the details pane (STATUS, TITLE, NOTES) |
+| `tagInput()` (`lib/tags.ts`) | tags as chips: Enter or comma adds, Backspace removes the last, suggestions from tags in use |
 
 - Buttons use the default cursor; only real links (`a[href]`) get the pointer.
 - **Icon-only buttons** need a `title`. `initTooltips()` turns it into a tooltip (hover, keyboard focus, long-press)
@@ -79,8 +90,13 @@ Utilities defined in `global.css`:
   parentheses, e.g. `title="Zoom in (+)"`; it is shown as a key cap and left out of the accessible name.
 - **Toolbars** show the few most-used actions; the rest go into a **More** menu. The editor groups its actions into
   Cells / Rows / Columns / Table menus. Toolbars wrap on narrow windows instead of clipping.
-- **Dialogs** are a last resort. Prefer inline panes (the Tables page uses a preview pane, not a modal).
-  `confirmDialog` is only used for *Delete Permanently…*.
+- **Dialogs** are a last resort. Prefer inline panes (the Tables page uses a preview pane, not a modal). Modals
+  (`<dialog>`) are used for forms that need several fields at once: *Upload PDFs* (year per file) and *Edit Details and
+  Tags*. `confirmDialog` is only used for *Delete Permanently…*.
+- **Context menus on trees** (Library categories, Tables documents) also fold: Expand / Collapse, This and All Below,
+  Expand All / Collapse All.
+- **Column choice**: the Tables list hides columns from its *Columns* menu or by right-clicking the column headers; the
+  choice is remembered.
 
 ## Feedback
 
@@ -91,8 +107,13 @@ Use `toast(msg, kind, { action })` from `ui.ts`.
   one hour (`POST /api/documents/{id}/restore`); table changes snapshot a version and return `undo_version`.
 - **Errors** use `toastError(e, retry)`: 7 s, `role="alert"`, with Retry when a retry function is given.
 - Toasts pause while hovered or focused.
-- **Long operations** show determinate progress ("Downloading 4.7 MB of 8.1 MB") and can be cancelled (BPS import).
-  Uploads show percentage.
+- **Long operations** show determinate progress ("Downloading 4.7 MB of 8.1 MB", "Page 318 of 512") and can be
+  cancelled. BPS imports go through the **Queue** (one at a time, stages Queued › Download › Find tables › Done); the
+  top bar shows how many are waiting or running. Uploads show percentage per file.
+- **Suggestions, not surprises**: detected continuation tables are offered in a bar (Join All Automatically / Review
+  One by One / Not Now / Don't Ask Again); automatic steps never set a flag, validating stays manual.
+- **Show what *Auto* chose**: an automatic setting names its result and the reason (Decimal: "Auto: comma ·
+  1.234,5 · detected from 55 numbers"); an unsure result is orange and asks for a choice.
 - **Empty states** explain why it's empty and offer the action that fills it.
 - The header health indicator only appears when something is wrong (server unreachable, BPS key missing).
 
@@ -109,8 +130,10 @@ Use `toast(msg, kind, { action })` from `ui.ts`.
 
 | Where | Keys |
 |---|---|
-| Anywhere in the workspace | Alt+1 / 2 / 3 → PDF / list / editor · Ctrl+PgUp / PgDn → previous / next tab |
-| Table list (listbox) | ↑ ↓ Home End PgUp PgDn · Shift+↑↓ extend · Space toggle · Ctrl+A all · Enter open in editor · → ← expand / collapse parts · Delete · `v` valid · `x` not a table |
+| Anywhere in the workspace | Alt+1 / 2 / 3 / 4 → PDF / list / details / cells · Ctrl+PgUp / PgDn → previous / next tab · `F` single pane (focus mode) |
+| Tables page list | ↑ ↓ move and preview · Shift+↑↓ extend · Space toggle · Shift+click range · Ctrl+click add / remove · Menu key actions · Esc closes the preview |
+| Trees (Library, Tables) | ↑ ↓ · → ← expand / collapse · Enter select · Menu key or Shift+F10: folding and other actions |
+| Workspace table list (listbox) | ↑ ↓ Home End PgUp PgDn · Shift+↑↓ extend · Space toggle · Ctrl+A all · Enter open in editor · → ← expand / collapse parts · Delete · `v` valid · `x` not a table |
 | Menus | ↑ ↓ Home End, Enter, Esc (focus returns to the opener) · Menu or Shift+F10 opens the context menu |
 | PDF table area (focused) | arrows move · Shift+arrows resize · steps of 2 pt, Alt for 0.5 pt · re-extract runs 700 ms after the last key |
 | Pane dividers | arrows resize · double-click resets |
@@ -123,9 +146,17 @@ and after Undo; the focused row in a listbox has a visible outline separate from
 
 ## Layout
 
-- Workspace panes: **a** = PDF, **b** = table list, **c** = editor. Default layout is `b | a | c`.
+- Top bar: one navy strip (`--nav-*` tokens, a darker navy in the dark scheme), **text only, no icons**: brand,
+  Library · Tables · BPS Catalog (editors), then Queue with a count badge (editors; hidden at 0), Settings | user name
+  in small caps (or Log In). The active link has a lighter fill and a white bottom border.
+- Pages: `/` Library, `/tables`, `/import-from-bps` BPS catalog (`/search` redirects there), `/queue`, `/doc`
+  workspace, `/settings`, `/users`.
+- Workspace panes: **A** = PDF (with the page rail; its header is a page icon), **B** = table list (one flat list in
+  reading order, no tabs), **M** = details (flag, title, notes), **G** = cells. Default preset *Standard*: `B | ((A | M) / G)`. Presets and *Single Pane (Focus Mode)* are in the
+  Layout menu; each preset has a mini wireframe icon, the chosen one a blue fill and a check.
 - Below 1100 px wide, multi-column layouts fall back to `list-tabs`; below 720 px, everything goes into tabs
   (`Layout.effective()` in `lib/layout.ts`). The user's chosen layout is kept and comes back when the window grows.
+- The Tables page has resizable panes too (`lib/split.ts`); modals (upload, edit details) are `<dialog>`s.
 - Dividers have `role="separator"` with `aria-valuenow` and are keyboard-resizable.
 - Per-document state (`localStorage` key `tdp.doc.<id>`): last table, page and zoom.
 - A skip link and `aria-current` on the active nav item are in `Layout.astro`.
@@ -141,6 +172,9 @@ and after Undo; the focused row in a listbox has a visible outline separate from
 mise run check:a11y                        # axe (light + dark) on every page, plus the 900px tabs fallback
 BASE=http://127.0.0.1:8010 bun tests/a11y.ts   # against another server (run in frontend/)
 ```
+
+Check against a server on a **copy** of the library (`DATA_DIR=/tmp/…`, see `frontend/AGENTS.md`), as an editor, an
+admin and a visitor. When a page changes visibly, refresh its screenshot in `docs/screenshots/`.
 
 Before merging UI changes: the a11y check passes, the page works by keyboard alone, and it looks right in the dark
 scheme and at 900 px wide.

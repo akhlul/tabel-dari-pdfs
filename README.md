@@ -4,11 +4,21 @@ Find BPS publications, extract their tables, edit them, export them.
 This rewrites `pdf-table-viewer`: **pdfspine** (Apache-2.0, pure Rust) replaces PyMuPDF, and the UI is new.
 
 ```
-1. get a PDF   upload it, or search the BPS Web API (Publikasi / Berita Resmi Statistik) and import it
-2. extract     "Get all tables" runs a background job over every page (or a page range),
-               or "Select region" to draw a box around one table
-3. use tables  saved in the library, editable in the browser, export to XLSX / CSV / JSON
+1. get a PDF   upload it (with its publication year and tags), or pick publications / press releases
+               in the BPS catalog (BPS Web API) and import them through the queue
+2. extract     tables are found after an upload or import, or with "Get All Tables" (all pages or a range),
+               or draw an area around one table
+3. review      join tables that continue on the next page, fix cells, flag each table Valid or Not a table
+4. use tables  export to XLSX / CSV / JSON, or read the valid ones through the public JSON API
 ```
+
+![The workspace: table list, PDF with the page rail, details of the open table, and its cells](docs/screenshots/editor.png)
+
+| | |
+|---|---|
+| ![Library](docs/screenshots/library.png) **Library**: documents by category, year, tags, who added them | ![Tables](docs/screenshots/tables.png) **Tables**: every table, who validated it, preview next to the PDF |
+| ![BPS Catalog](docs/screenshots/bps-catalog.png) **BPS Catalog**: select several results, import them to the queue | ![Queue](docs/screenshots/queue.png) **Queue**: imports run one at a time; move, cancel, retry, pause |
+| ![Upload](docs/screenshots/upload.png) **Upload**: each file needs a publication year | ![Dark scheme](docs/screenshots/editor-dark.png) **Dark scheme**: follows the system, or Settings → Appearance |
 
 ## Stack
 
@@ -117,29 +127,61 @@ The engine then appears automatically in the UI. Pre-fetching the two pinned mod
   - Tables split across pages by **width** (same row labels, e.g. columns (1)–(3) on one page and (1), (4), (5) on the next) are joined **as columns**: rows are matched on the first (label) column, and the repeated label column is dropped. This is detected automatically; the Join menu also offers "Join Below" and "Join as Columns" to choose explicitly.
   - The joined table keeps a link to every page region; each continuation is drawn as a dashed "part" box.
   - **Unjoin** puts both tables back.
+  ![Join offer](docs/screenshots/join-offer.png)
+
+  - When a document is opened (and after *Get All Tables*) and it has continuations that are not joined yet, a bar
+    offers to join them: **Join All Automatically**, or **Review One by One** (each group is shown in the PDF and the
+    editor: Join, Skip, Join All Remaining, Stop). *Not Now* asks again next time; *Don't Ask Again* stays quiet for
+    this document until new continuations are found. Joining never sets a flag: validating stays manual.
+  - A continuation is the next table (same or next page) titled "Lanjutan / Continued", with the same table number,
+    or repeating the header; with the same row labels and more columns it is joined as columns. Two tables with
+    **different** numbers ("Tabel 2" and "Tabel 3") are never suggested, even when their headers are the same.
   - Exports label a joined table with its page range ("halaman 43–44").
 
 - In a joined table, the editor marks where each page's rows begin (a `p69` tag and a divider line).
+  - A join uses the cells as they are now, edits included (unsaved edits are saved first).
   - Clicking a part (`p69`) in the list, or its dashed box on the PDF, scrolls the editor to that page's rows and selects them.
   - The status bar shows which page the current row came from.
   - Right-click a cell and choose **Show page N in PDF** to jump to that page's region.
-- **Layout** (grid button next to *Get all tables*). The panes are a = PDF, b = table list, c = editor.
-  - Layouts: `a | b/c`, `a | tab(b,c)`, `b | a | c`, `b | tab(a,c)`, `b/c | a`, `a / (b | c)`, `tab(a,b,c)`.
+- The workspace has four panes: the **table list**, the **PDF** with a page rail (page numbers and the number of
+  tables on each page; green = one of them is valid), the **details** of the open table (flag, title, notes, who
+  validated it and when) and the **cells** below.
+- **Decimal** (cells toolbar): *Auto* shows what it detected and why ("Auto: comma · 1.234,5 · detected from 55
+  numbers"); orange "not sure" means only ambiguous numbers like 1.234 were found, so choose Comma or Dot.
+  ![Layout presets](docs/screenshots/layout-presets.png)
+
+- **Layout** (next to *Export*) offers four presets: *Standard (3-Column)*, *Viewer Left (Stacked Right)*,
+  *Viewer Left (Right Tabs)*, *List Left (Viewer/Editor Tabs)*, plus *Single Pane (Focus Mode)* (`F`).
   - Drag a divider to resize it; double-click a divider to reset.
   - Double-click a table in the list to bring the editor tab forward.
   - The chosen layout, pane sizes and active tabs are remembered.
 
-**Tables** (`/tables`) lists every table in the library. By default it shows tables flagged valid.
+**Tables** (`/tables`) lists every table in the library in three resizable panes: documents by category, a dense
+table list, and a preview (the PDF region and the extracted cells, with **Open Full PDF**).
 
-- Filter by flag: any mix of *no flag / valid / not a table / marked as deleted*, plus *edited only*.
-- Filter by source type (Publikasi / BRS / upload) and by document. Search titles, notes and document names.
-- Each card shows:
-  - the PDF region rendered by pdfspine;
-  - a preview of the table;
-  - where it comes from (document, page, position on the page);
-  - **Open in PDF**, which jumps to the table in the workspace.
-- Click the image to see the PDF region and the extracted table side by side.
+- Filter by flag (chips: unflagged / valid / not a table / deleted, plus *edited*), by source, by **validator** and by
+  document or category. Search titles, notes and document names.
+- Columns: thumbnail, title and document, status, **validated by** and **validated on** (who set the flag valid /
+  not a table, and when; cleared when the flag is cleared), page. Sort by document, recent change or validation.
+- Select several tables with the checkboxes, Shift+click (a range) or Ctrl+click (one more); Shift+↑↓ and Space work too.
+- **Columns** (bottom bar, or right-click the column headers) shows or hides thumbnail, status, validated by / on and page.
+- Right-click a category in the document tree (here and in the Library) to expand or collapse it, it and all below it,
+  or everything.
 - Bulk actions: flag, delete, restore, and export the selection to XLSX / CSV-zip / JSON.
+
+**Library** (`/`): one row per document with who uploaded or imported it, its **publication year** and **tags**, and
+filters for category, year (also *Year missing*), source, who added it and tags. Uploading opens a modal where each file
+needs a publication year (read from the file name when it has one) and can get a category and tags. *Edit Details and
+Tags…* in the ⋮ menu changes title, year, category and tags.
+
+**BPS Catalog** (`/import-from-bps`; the old `/search` links redirect there): select several results and *Import to Queue*; the page stays where it is and each result
+shows its place in the queue, its download progress, or *In Library*. The selection is kept across new searches and
+result pages, and leaving the page and coming back brings back the last search (per browser tab).
+
+**Queue** (`/queue`): BPS imports run one at a time, in order (download → read the PDF → find tables). Waiting imports
+can be moved up or cancelled, failed ones retried; *Pause Queue* lets the running import finish and holds the rest.
+Uploads and *Find Tables Again* appear here too. The queue is stored in SQLite and survives a restart (an interrupted
+download starts again).
 
 Exports include the title, the notes (under the table in XLSX) and merged cells (real merged ranges in XLSX, a `merges` list in JSON). Document exports skip deleted tables and "not a table" by default; you can also choose *valid only*.
 
@@ -154,8 +196,8 @@ and the accessibility check (`mise run check:a11y`).
 | who | can |
 |-----|-----|
 | visitor (not logged in) | read tables **flagged valid** (Library, Tables, the workspace read-only), export them, `/api/v1` |
-| `editor` | everything with the library: import, upload, extract, edit, flag, delete, categories |
-| `admin` | also users (`/users`), backup / restore, permanent deletes |
+| `editor` | everything with the library: import (BPS catalog, queue), upload, extract, edit, flag, delete, categories; year and tags of **uploaded** documents |
+| `admin` | also year and tags of every document, users (`/users`), backup / restore, permanent deletes |
 
 Two ways to log in (`backend/app/auth.py`):
 
@@ -184,8 +226,11 @@ uv run python -m app.auth list
 ### Several people at once
 
 - **One extraction job per document**: starting a second one (or extracting a whole page) while a job runs gives `409`
-  with the running job, and the UI follows that job ("started by …"). Each user may have `JOBS_PER_USER` (2) documents
-  queued or running at once; the server runs `JOB_WORKERS` (2) of them at the same time, the rest wait in line.
+  with the running job, and the UI follows that job ("started by …"). Each user may start `JOBS_PER_USER` (2) table
+  searches by hand (Get All Tables, Find Tables Again) at once; searches after an upload and BPS imports are not limited,
+  they wait in the queue. The server runs `JOB_WORKERS` (2) searches at the same time, the rest wait in line.
+- **Year and tags**: editors set them on uploaded documents; on documents from BPS only an admin can change them.
+- **Queue page and the BPS catalog**: editors and admins only (visitors are sent to the login page).
 - **No silent overwrites**: the editor sends `base` (the `updated_at` its copy is based on) with every save; when someone
   else saved the table meanwhile the save is refused (`409`, with the current table) and the editor asks: keep my change
   (only the fields I changed are written) or use their version. Saves of one table are sent one after another.
@@ -211,15 +256,18 @@ Responses have an `ETag` (send `If-None-Match` for a 304) and `Cache-Control: ma
 GET  /api/bps/search?kind=publication|pressrelease&domain=0000&keyword=&year=&month=&page=&lang=
 GET  /api/bps/domains
 GET  /api/locate[?lat=&lon=]    {domain,region,country,source}: the user's BPS province (browser coordinates via OSM Nominatim, else ip-api.com)
-POST /api/bps/import            {kind,id,domain,lang,extract}
-GET  /api/documents             POST /api/documents (multipart file, extract)
-GET  /api/documents/{id}        PATCH {title?,category?}  DELETE ...   /pdf   /thumb
+POST /api/bps/import            {kind,id,domain,lang,extract}    (adds one item to the queue)
+GET  /api/queue?status=active|done|error|cancelled|all&source=&by=     GET /api/queue/count
+POST /api/queue/imports {items:[{kind,id,domain,lang,extract,title?}]}   POST /api/queue/imports/{id}/cancel|retry|move {to:up|top}
+DELETE /api/queue/imports/{id}  POST /api/queue/jobs/{id}/retry  DELETE /api/queue/jobs/{id}  POST /api/queue/pause {paused}  POST /api/queue/clear
+GET  /api/documents             POST /api/documents (multipart file, extract, year, tags=[json], category=[json])
+GET  /api/documents/{id}        PATCH {title?,category?,year?,tags?}  DELETE ...   /pdf   /thumb
 POST /api/documents/move        {ids,category}        POST /api/documents/{id}/auto-category
 POST /api/categories/rename     {path,to}             (rename / move a category with everything below it; to=[] = uncategorise)
 POST /api/documents/{id}/jobs   {engine,pages?,replace}     GET /api/jobs/{id}   POST /api/jobs/{id}/cancel
 POST /api/documents/{id}/extract {page,bbox?,engine}        (region, bbox in PDF points)
 GET  /api/documents/{id}/tables POST (empty table)
-GET  /api/tables?state=valid,none,invalid,deleted&edited=&docs=&kinds=&q=&sort=&offset=&limit=   (+ facet counts)
+GET  /api/tables?state=valid,none,invalid,deleted&edited=&docs=&kinds=&validator=&q=&sort=document|recent|validated&offset=&limit=   (+ facet counts)
 GET  /api/tables/{id}           (with document reference)
 PATCH /api/tables/{id} {title,notes,rows,merges,header_rows,status,deleted,bbox,checkpoint}
 POST /api/tables/{id}/reextract {bbox?,engine}   POST /api/tables/{id}/reset
@@ -246,6 +294,13 @@ table's own setting (`PATCH {decimal_sep: "auto"|","|"."}`, the "Decimal" contro
 it is detected from the body cells: `10.498,2`, `1.234.567`, `25,9` vote strongly, ambiguous `1.234` only breaks ties,
 and with no evidence the Indonesian `,` is kept.
 
-**Local settings** (`/settings`, `frontend/src/lib/settings.ts`) live in the browser's localStorage only: default BPS
-region (detected from the browser location, else the internet address; or a fixed region), remembering the last search
-filters (never the keyword), result language, Library view, finding tables after upload, and export defaults.
+**Local settings** (`/settings`, `frontend/src/lib/settings.ts`) live in the browser's localStorage only: color scheme
+(same as the system, light or dark), default BPS region (detected from the browser location, else the internet address;
+or a fixed region), remembering the last search filters (never the keyword), result language, finding tables after
+upload, and export defaults. The BPS catalog also keeps the current search and selection for the browser tab
+(sessionStorage), so leaving the page and coming back restores them.
+
+## Contributing
+
+Notes for people and coding agents (layout of the code, testing on a copy of the library, conventions) are in
+[`frontend/AGENTS.md`](frontend/AGENTS.md). Screenshots for this README live in `docs/screenshots/`.

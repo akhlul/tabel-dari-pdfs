@@ -1,0 +1,237 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout title="Queue" active="queue" wide>
+  <div class="flex flex-wrap items-center gap-lg mb-3">
+    <h1 class="text-xl font-semibold text-ink-900 tracking-tight mr-2">Queue</h1>
+    <div id="status" role="radiogroup" aria-label="Show" class="flex flex-wrap gap-sm"></div>
+    <label class="flex items-center gap-md text-[12.5px] text-ink-600 ml-2">Source
+      <select id="source" class="field h-8 text-[12.5px]">
+        <option value="">All</option><option value="import">BPS import</option><option value="upload">Upload</option><option value="rerun">Find tables again</option>
+      </select></label>
+    <label class="flex items-center gap-md text-[12.5px] text-ink-600">Started by
+      <select id="by" class="field h-8 text-[12.5px] max-w-48"><option value="">Everyone</option></select></label>
+    <span class="flex-1"></span>
+    <button id="pause" class="btn-line"></button>
+    <button id="clear" class="btn-line" title="Remove finished imports and searches from this list. Documents and tables stay.">Clear Finished</button>
+  </div>
+  <p class="text-[13px] text-ink-600 mb-3">BPS imports run one at a time, in this order: download, read the PDF, find the tables. Uploads and “Find Tables Again” wait for a free worker.</p>
+
+  <div id="paused" role="status" class="hidden mb-3 px-3 py-2 border border-accent-400 bg-orange-50 text-[13px] text-ink-900 flex items-center gap-lg">
+    <Icon name="pause" class="size-4" /><span class="flex-1"><b>The queue is paused.</b> The import that is running finishes; the waiting ones start when you resume.</span>
+    <button id="resume2" class="btn-line btn-sm">Resume Queue</button>
+  </div>
+
+  <div id="sum" class="grid grid-cols-5 border border-ink-200 bg-surface mb-3" aria-label="Summary"></div>
+
+  <div class="panel overflow-x-auto">
+    <table class="w-full text-[12.5px] border-collapse" aria-describedby="sum">
+      <thead><tr class="text-left text-[11.5px] font-semibold text-ink-700 bg-ink-100 border-b border-ink-300">
+        <th class="w-14 px-2 py-1.5"><span class="sr-only">Cover</span></th>
+        <th class="px-2 py-1.5">Document</th>
+        <th class="w-36 px-2 py-1.5">Source</th>
+        <th class="w-[340px] px-2 py-1.5">Progress</th>
+        <th class="w-20 px-2 py-1.5 text-right">Tables</th>
+        <th class="w-40 px-2 py-1.5">Started</th>
+        <th class="w-52 px-2 py-1.5 text-right">Actions</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="p-6"><div class="skeleton h-4 w-1/2"></div></td></tr></tbody>
+    </table>
+  </div>
+</Layout>
+
+<script>
+  import { api, type QueueItem, type QueueList } from '../lib/api';
+  import { $, esc, fmtBytes, fmtDate, plural, toast, toastError } from '../lib/ui';
+  import { icon } from '../lib/icons';
+  import { me, loginUrl } from '../lib/auth';
+
+  me().then((m) => { if (!m.user) location.replace(loginUrl()); });
+
+  const u = new URLSearchParams(location.search);
+  const f = { status: u.get('status') ?? 'all', source: u.get('source') ?? '', by: u.get('by') ?? '' };
+  $<HTMLSelectElement>('#source').value = f.source;
+  let data: QueueList | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const syncUrl = () => {
+    const q = new URLSearchParams(Object.entries(f).filter(([k, v]) => v && !(k === 'status' && v === 'all')));
+    history.replaceState(null, '', q.size ? `?${q}` : location.pathname);
+  };
+
+  async function load() {
+    clearTimeout(timer);
+    try {
+      data = await api.queue(f);
+      render();
+    } catch (e: any) {
+      $('#rows').innerHTML = `<tr><td colspan="7" class="p-8 text-center"><p class="text-red-700">${esc(e.message)}</p><button id="retry" class="btn-primary mt-3">Retry</button></td></tr>`;
+      $('#retry').addEventListener('click', load);
+      return;
+    }
+    if (!document.hidden) timer = setTimeout(load, data.counts.active ? 1500 : 10000);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+
+  const when = (ts: number | null) => {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? hm : `${fmtDate(ts)}, ${hm}`;
+  };
+  const dur = (a: number | null, b: number | null) => {
+    if (!a || !b) return '';
+    const s = Math.max(0, b - a);
+    return s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
+  };
+
+  function render() {
+    const d = data!;
+    const c = d.counts;
+    $('#status').innerHTML = ([['active', 'Active', c.active], ['done', 'Done', c.done], ['error', 'Failed', c.error], ['cancelled', 'Cancelled', c.cancelled], ['all', 'All', c.all]] as const)
+      .map(([v, l, n]) => `<button role="radio" aria-checked="${f.status === v}" data-status="${v}" class="chip h-7 px-2.5 text-[12px] ${f.status === v ? 'bg-brand-700 border-brand-700 text-white' : 'border-ink-300 bg-surface text-ink-800 hover:border-ink-500'}">
+        ${v === 'error' && n ? icon('x', 'size-3') : ''}${l} <span class="tabular-nums ${f.status === v ? '' : 'text-ink-500'}">${n}</span></button>`).join('');
+    const by = $<HTMLSelectElement>('#by');
+    by.innerHTML = '<option value="">Everyone</option>' + d.users.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    by.value = f.by;
+    $('#pause').innerHTML = d.paused ? `${icon('play', 'size-3.5')}Resume Queue` : `${icon('pause', 'size-3.5')}Pause Queue`;
+    $('#pause').title = d.paused ? 'Start the waiting imports again' : 'The running import finishes; the waiting ones wait';
+    $('#paused').classList.toggle('hidden', !d.paused);
+    const box = (label: string, n: number, extra = '') => `<div class="px-3 py-2 border-r border-ink-200 last:border-r-0 ${extra}">
+      <div class="text-[11.5px] text-ink-600">${label}</div><div class="text-[20px] font-semibold text-ink-900 tabular-nums leading-tight">${n.toLocaleString('id')}</div></div>`;
+    $('#sum').innerHTML = box('Running', c.running) + box('Waiting', c.waiting) + box('Finished today', c.done_today)
+      + box('Failed', c.error, c.error ? 'bg-red-50' : '') + box('Tables found today', c.found_today);
+    renderRows(d.items);
+  }
+
+  const GROUP_LABEL = { running: 'Running', waiting: 'Waiting · BPS imports run one at a time, in this order', finished: 'Finished' } as const;
+
+  function renderRows(items: QueueItem[]) {
+    if (!items.length) {
+      $('#rows').innerHTML = `<tr><td colspan="7" class="px-6 py-14 text-center text-[13px] text-ink-600">
+        ${f.status === 'all' && !f.source && !f.by ? 'Nothing in the queue. Import publications from the <a href="/import-from-bps" class="text-brand-600 underline">BPS catalog</a> or upload PDFs in the <a href="/" class="text-brand-600 hover:underline">Library</a>.'
+          : 'Nothing matches. <button data-reset class="btn-line btn-sm ml-2">Show Everything</button>'}</td></tr>`;
+      return;
+    }
+    const waitingImports = items.filter((x) => x.group === 'waiting' && x.type === 'import');
+    let html = '', group = '';
+    for (const it of items) {
+      if (it.group !== group) {
+        group = it.group;
+        html += `<tr class="bg-ink-50 border-b border-ink-200"><th colspan="7" scope="colgroup" class="text-left px-2 h-7 text-[11px] font-semibold uppercase tracking-wider text-ink-600">${GROUP_LABEL[it.group]}</th></tr>`;
+      }
+      html += row(it, waitingImports[0]?.id === it.id);
+    }
+    $('#rows').innerHTML = html;
+  }
+
+  /** the stages, with the current one filled (and a failed one marked) */
+  function steps(it: QueueItem) {
+    const names = it.type === 'import' ? ['Queued', 'Download', 'Find tables', 'Done'] : ['Queued', 'Find tables', 'Done'];
+    const at = it.type === 'import'
+      ? ({ queued: 0, downloading: 1, processing: 1, extracting: 2, done: 4 } as Record<string, number>)[it.status] ?? (it.document_id ? 2 : 1)
+      : ({ queued: 0, extracting: 1, done: 3 } as Record<string, number>)[it.status] ?? 1;
+    const bad = it.status === 'error' || it.status === 'cancelled';
+    return `<div class="flex flex-wrap items-center gap-0.5 text-[10.5px]">${names.map((n, i) => {
+      const cls = i < at ? 'bg-ink-200 border-ink-300 text-ink-700' : i === at ? (bad ? 'bg-surface border-ink-700 border-dashed text-ink-900 font-semibold' : 'bg-brand-700 border-brand-700 text-white font-semibold') : 'bg-surface border-ink-200 text-ink-500';
+      return `<span class="px-1.5 border ${cls}">${i === at && bad ? (it.status === 'error' ? '× ' : '') : i < at ? '✓ ' : ''}${n}</span>`;
+    }).join('<span class="text-ink-400" aria-hidden="true">›</span>')}</div>`;
+  }
+
+  function progress(it: QueueItem) {
+    const bar = (pct: number) => `<div class="h-1.5 mt-1 bg-ink-100 border border-ink-200" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><div class="h-full bg-brand-500 transition-[width]" style="width:${pct}%"></div></div>`;
+    let detail = '';
+    if (it.status === 'queued') detail = it.position ? `#${it.position} in line` : 'waiting';
+    else if (it.status === 'downloading') {
+      const pct = it.bytes_total ? (100 * (it.bytes_done ?? 0)) / it.bytes_total : 0;
+      return steps(it) + bar(pct) + `<div class="text-[11px] text-ink-600 mt-0.5">Downloading ${fmtBytes(it.bytes_done ?? 0)}${it.bytes_total ? ` of ${fmtBytes(it.bytes_total)}` : ''}</div>`;
+    } else if (it.status === 'processing') detail = 'Reading the PDF…';
+    else if (it.status === 'extracting') {
+      const pct = it.pages_total ? (100 * (it.pages_done ?? 0)) / it.pages_total : 0;
+      const el = it.started_at ? Date.now() / 1000 - it.started_at : 0;
+      const left = it.pages_done && it.pages_total && el > 5 ? (el / it.pages_done) * (it.pages_total - it.pages_done) : 0;
+      return steps(it) + bar(pct) + `<div class="text-[11px] text-ink-600 mt-0.5">Page ${it.pages_done ?? 0} of ${it.pages_total ?? '?'}${left > 30 ? ` · about ${Math.ceil(left / 60)} min left` : ''}</div>`;
+    } else if (it.status === 'done') detail = `${icon('check', 'size-3 inline')} Done${dur(it.started_at, it.finished_at) ? ` in ${dur(it.started_at, it.finished_at)}` : ''}${it.pages_total ? ` · ${plural(it.pages_total, 'page')}` : ''}`;
+    else if (it.status === 'cancelled') detail = 'Cancelled';
+    else if (it.status === 'error') return steps(it) + `<div class="text-[11.5px] text-red-800 mt-1"><b>${it.type === 'import' && !it.document_id ? 'Download failed:' : 'Failed:'}</b> ${esc(it.error ?? 'unknown error')}</div>`;
+    return steps(it) + `<div class="text-[11px] text-ink-600 mt-1">${detail}</div>`;
+  }
+
+  const SOURCE: Record<QueueItem['source'], string> = { import: 'BPS import', upload: 'Upload', rerun: 'Find tables again' };
+  const STATUS: Record<string, string> = { queued: 'Waiting', downloading: 'Running', processing: 'Running', extracting: 'Running', done: 'Done', error: 'Failed', cancelled: 'Cancelled' };
+
+  function row(it: QueueItem, first: boolean) {
+    const thumb = it.document_id ? api.thumbUrl(it.document_id) : it.cover;
+    const ref = `data-type="${it.type}" data-id="${it.id}"`;
+    const btn = (act: string, label: string, extra = '') => `<button data-act="${act}" ${ref} class="btn-line btn-sm" ${extra}>${label}</button>`;
+    let acts = '';
+    if (it.group === 'waiting') acts = (it.type === 'import' ? btn('up', icon('arrowUp', 'size-3.5'), `title="Move up" aria-label="Move up" ${first ? 'disabled' : ''}`) : '') + btn('cancel', 'Cancel');
+    else if (it.group === 'running') acts = btn('cancel', 'Cancel');
+    else if (it.status === 'done') acts = (it.document_id ? `<a href="/doc?id=${it.document_id}" class="btn-primary btn-sm">Open</a>` : '') + btn('remove', 'Remove');
+    else acts = btn('retry', `${icon('reset', 'size-3.5')}Retry`) + btn('remove', 'Remove');
+    const title = it.document_id && it.status === 'done' ? `<a href="/doc?id=${it.document_id}" class="hover:underline hover:text-brand-700">${esc(it.title)}</a>` : esc(it.title);
+    return `<tr class="border-b border-ink-100 align-middle ${it.status === 'error' ? 'bg-red-50/50' : ''}">
+      <td class="px-2 py-2"><div class="w-8 h-11 bg-ink-100 border border-ink-200 overflow-hidden">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" class="w-full h-full object-cover object-top" onerror="this.style.visibility='hidden'" />` : ''}</div></td>
+      <td class="px-2 py-2 min-w-0"><div class="font-semibold text-ink-900 line-clamp-2">${title}</div>
+        <div class="text-[11.5px] text-ink-600">${it.status === 'error' ? icon('x', 'size-3 inline text-red-700') + ' ' : it.group === 'running' ? icon('spinner', 'size-3 inline text-brand-600') + ' ' : ''}${STATUS[it.status]}</div></td>
+      <td class="px-2 py-2"><span class="chip h-6 border-ink-300 bg-surface text-ink-800">${SOURCE[it.source]}</span></td>
+      <td class="px-2 py-2">${progress(it)}</td>
+      <td class="px-2 py-2 text-right tabular-nums ${it.found ? 'text-ink-900 font-medium' : 'text-ink-400'}">${it.found ?? '—'}</td>
+      <td class="px-2 py-2 text-ink-700 whitespace-nowrap">${esc(it.created_by_name ?? '—')}<div class="text-[11.5px] text-ink-500">${when(it.created_at)}</div></td>
+      <td class="px-2 py-2"><div class="flex justify-end gap-md">${acts}</div></td></tr>`;
+  }
+
+  // ------------------------------------------------------------ actions
+  $('#rows').addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-reset]')) { Object.assign(f, { status: 'all', source: '', by: '' }); $<HTMLSelectElement>('#source').value = ''; syncUrl(); load(); return; }
+    const b = t.closest<HTMLButtonElement>('[data-act]');
+    if (!b) return;
+    const { act, type, id } = b.dataset as { act: string; type: 'import' | 'job'; id: string };
+    b.disabled = true;
+    try {
+      if (type === 'import') {
+        if (act === 'cancel') await api.cancelImport(id);
+        else if (act === 'retry') await api.retryImport(id);
+        else if (act === 'up') await api.moveImport(id, 'up');
+        else if (act === 'remove') await api.removeImport(id);
+      } else {
+        if (act === 'cancel') await api.cancelJob(id);
+        else if (act === 'retry') await api.retryJob(id);
+        else if (act === 'remove') await api.dismissJob(id);
+      }
+      dispatchEvent(new Event('tdp-queue'));
+      await load();
+    } catch (er) { b.disabled = false; toastError(er); }
+  });
+  $('#status').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-status]');
+    if (!b) return;
+    f.status = b.dataset.status!; syncUrl(); load();
+  });
+  $('#status').addEventListener('keydown', (e) => { // radio group: arrows move the choice
+    const opts = ['active', 'done', 'error', 'cancelled', 'all'];
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    f.status = opts[(opts.indexOf(f.status) + d + opts.length) % opts.length]!;
+    syncUrl(); load().then(() => $<HTMLElement>(`[data-status="${f.status}"]`)?.focus());
+  });
+  $('#source').addEventListener('change', () => { f.source = $<HTMLSelectElement>('#source').value; syncUrl(); load(); });
+  $('#by').addEventListener('change', () => { f.by = $<HTMLSelectElement>('#by').value; syncUrl(); load(); });
+  async function togglePause() {
+    try { await api.pauseQueue(!data?.paused); dispatchEvent(new Event('tdp-queue')); await load(); } catch (er) { toastError(er); }
+  }
+  $('#pause').addEventListener('click', togglePause);
+  $('#resume2').addEventListener('click', togglePause);
+  $('#clear').addEventListener('click', async () => {
+    try {
+      const r = await api.clearQueue();
+      await load();
+      if (!r.removed) toast('Nothing finished to clear.', 'info');
+    } catch (er) { toastError(er); }
+  });
+
+  load();
+</script>

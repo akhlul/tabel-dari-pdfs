@@ -70,6 +70,33 @@ CREATE TABLE IF NOT EXISTS table_versions (
   created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS versions_table ON table_versions(table_id, id);
+-- BPS imports waiting / running / finished (the import queue, see imports.py); one runs at a time, by position
+CREATE TABLE IF NOT EXISTS imports (
+  id TEXT PRIMARY KEY,
+  source_key TEXT NOT NULL,          -- bps:<kind>:<domain>:<id> (same as documents.source_key)
+  kind TEXT NOT NULL,                -- publication | pressrelease
+  bps_id TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  lang TEXT NOT NULL DEFAULT 'ind',
+  extract INTEGER NOT NULL DEFAULT 1,
+  engine TEXT NOT NULL DEFAULT 'auto',
+  title TEXT NOT NULL DEFAULT '',
+  cover TEXT,
+  size TEXT,                         -- as listed by BPS, e.g. "7.5 MB"
+  status TEXT NOT NULL,              -- queued | downloading | processing | extracting | done | error | cancelled
+  position REAL NOT NULL,            -- order of the waiting imports
+  done INTEGER NOT NULL DEFAULT 0,   -- bytes downloaded
+  total INTEGER,                     -- bytes to download (when known)
+  document_id TEXT,
+  job_id TEXT,
+  error TEXT,
+  created_by TEXT,
+  created_at REAL NOT NULL,
+  started_at REAL,
+  finished_at REAL
+);
+CREATE INDEX IF NOT EXISTS imports_status ON imports(status, position);
+CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 """
 
 # columns added after the first release: (table, column, definition)
@@ -95,11 +122,16 @@ MIGRATIONS = [
     ("tables", "created_by", "TEXT"),
     ("tables", "updated_by", "TEXT"),
     ("table_versions", "created_by", "TEXT"),                      # who made the content stored in this version
+    ("documents", "year", "INTEGER"),                              # publication year (uploads: set by the uploader)
+    ("documents", "tags", "TEXT NOT NULL DEFAULT '[]'"),           # json ["IPM", "Kab. Bogor"]
+    ("tables", "validated_by", "TEXT"),                            # who set the flag (valid / not a table)
+    ("tables", "validated_at", "REAL"),
+    ("jobs", "dismissed", "INTEGER NOT NULL DEFAULT 0"),           # hidden from the queue page (Clear Finished)
 ]
 
 ACTIVE_JOB = "status IN ('queued','running')"
 
-JSON_COLS = {"category", "document_category", "meta", "pages", "bbox", "rows", "original_rows", "merges", "original_merges", "original_bbox", "parts", "orig"}
+JSON_COLS = {"category", "document_category", "tags", "meta", "pages", "bbox", "rows", "original_rows", "merges", "original_merges", "original_bbox", "parts", "orig"}
 
 
 def _connect() -> sqlite3.Connection:
@@ -135,6 +167,10 @@ def migrate(con: sqlite3.Connection) -> None:
         seen.add(r["document_id"])
     con.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS jobs_one_active ON jobs(document_id) WHERE {ACTIVE_JOB}")
     _categorise_new(con)
+    _guess_years(con)
+    # flags set before the validator was recorded: the last person who changed the table, at that time
+    con.execute("UPDATE tables SET validated_by=updated_by, validated_at=updated_at "
+                "WHERE status!='none' AND validated_at IS NULL")
 
 
 def init() -> None:
@@ -148,6 +184,11 @@ def init() -> None:
             "WHERE status IN ('queued','running')",
             (time.time(),),
         )
+        # imports: a download that was cut off starts again; finding tables was stopped above (Retry on the queue page)
+        con.execute("UPDATE imports SET status='queued', done=0, started_at=NULL "
+                    "WHERE status IN ('downloading','processing')")
+        con.execute("UPDATE imports SET status='error', error='Interrupted by a server restart', finished_at=? "
+                    "WHERE status='extracting'", (time.time(),))
 
 
 @contextmanager
@@ -198,6 +239,26 @@ def _categorise_new(con) -> None:
     for r in con.execute("SELECT id, title, source, meta FROM documents WHERE category IS NULL").fetchall():
         d = row(r) or {}
         con.execute("UPDATE documents SET category=? WHERE id=?", (dumps(categories.for_document(d)), d["id"]))
+
+
+def _guess_years(con) -> None:
+    """Documents without a publication year: from the title, the BPS release date or the file name."""
+    from .documents import guess_year
+
+    for r in con.execute("SELECT id, title, filename, meta FROM documents WHERE year IS NULL").fetchall():
+        d = row(r) or {}
+        y = guess_year(d["title"], d.get("meta") or {}, d["filename"])
+        if y:
+            con.execute("UPDATE documents SET year=? WHERE id=?", (y, d["id"]))
+
+
+def kv_get(con, k: str, default: str | None = None) -> str | None:
+    r = con.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
+    return r["v"] if r else default
+
+
+def kv_set(con, k: str, v: str) -> None:
+    con.execute("INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
 
 
 def _purge_deleted_documents(con, older_than: float) -> None:

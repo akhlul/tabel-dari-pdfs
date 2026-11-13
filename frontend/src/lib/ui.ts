@@ -20,7 +20,7 @@ export function h(html: string): HTMLElement {
 // Don't toast success that is already visible on screen.
 type ToastKind = 'info' | 'ok' | 'error';
 export interface ToastAction { label: string; run: () => void | Promise<unknown> }
-export interface ToastOpts { ms?: number; action?: ToastAction }
+export interface ToastOpts { ms?: number; action?: ToastAction; /** a second action, e.g. View Queue next to Undo */ action2?: ToastAction }
 
 export function toast(msg: string, kind: ToastKind = 'info', opts: number | ToastOpts = {}) {
   const o: ToastOpts = typeof opts === 'number' ? { ms: opts } : opts;
@@ -36,6 +36,7 @@ export function toast(msg: string, kind: ToastKind = 'info', opts: number | Toas
       translate-y-2 opacity-0 transition-all duration-200">
       <span class="${kind === 'error' ? 'text-red-600' : kind === 'ok' ? 'text-emerald-600' : 'text-brand-600'}">${icon(ic, 'size-3.5')}</span>
       <div class="flex-1 text-ink-800 py-1">${esc(msg)}</div>
+      ${o.action2 ? `<button data-act2 class="btn-line btn-sm">${esc(o.action2.label)}</button>` : ''}
       ${o.action ? `<button data-act class="btn-line btn-sm">${esc(o.action.label)}</button>` : ''}
       <button data-close class="btn-ghost btn-sm btn-icon" aria-label="Dismiss">${icon('x', 'size-3.5')}</button></div>`);
   host.append(el);
@@ -47,10 +48,12 @@ export function toast(msg: string, kind: ToastKind = 'info', opts: number | Toas
   el.addEventListener('mouseleave', arm);
   el.addEventListener('focusin', () => clearTimeout(timer));
   el.querySelector('[data-close]')!.addEventListener('click', close);
-  el.querySelector('[data-act]')?.addEventListener('click', async () => {
-    close();
-    try { await o.action!.run(); } catch (e: any) { toast(e?.message ?? String(e), 'error'); }
-  });
+  for (const [sel, a] of [['[data-act]', o.action], ['[data-act2]', o.action2]] as const) {
+    el.querySelector(sel)?.addEventListener('click', async () => {
+      close();
+      try { await a!.run(); } catch (e: any) { toast(e?.message ?? String(e), 'error'); }
+    });
+  }
   arm();
   return close;
 }

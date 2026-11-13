@@ -20,6 +20,10 @@ export interface Doc {
   valid_count?: number;
   last_job_status?: string | null;
   jobs?: Job[];
+  /** publication year (uploads: set by the uploader; others: guessed from the title / BPS release date) */
+  year: number | null;
+  tags: string[];
+  created_by_name?: string | null;
 }
 
 export interface Job {
@@ -67,6 +71,10 @@ export interface Table {
   /** who created / last changed it (staff only; null = before logins existed) */
   created_by_name?: string | null;
   updated_by_name?: string | null;
+  /** who flagged it valid / not a table, and when (staff only) */
+  validated_by?: string | null;
+  validated_by_name?: string | null;
+  validated_at?: number | null;
   parts: Part[];
   joined_into: string | null;
   state?: State;
@@ -94,6 +102,7 @@ export interface TableSearch {
   facets: {
     state: Record<State, number>; edited: number; kinds: Record<string, number>;
     docs: { id: string; title: string; kind: string; category: string[]; count: number }[];
+    validators: { id: string; name: string; count: number }[];
   };
 }
 
@@ -126,7 +135,29 @@ export interface BpsItem {
   subject: string | null;
   issn: string | null;
   document_id: string | null;
+  /** waiting / running / failed in the import queue */
+  queue: { id: string; status: ImportStatus; position: number | null; done: number; total: number | null; error: string | null } | null;
 }
+
+export type ImportStatus = 'queued' | 'downloading' | 'processing' | 'extracting' | 'done' | 'error' | 'cancelled';
+export interface Import {
+  id: string; source_key: string; kind: string; bps_id: string; domain: string; title: string; status: ImportStatus;
+  position: number; done: number; total: number | null; document_id: string | null; job_id: string | null; error: string | null;
+}
+/** one row of the queue page: a BPS import, or a table search (upload / run again) */
+export interface QueueItem {
+  key: string; type: 'import' | 'job'; id: string; title: string; source: 'import' | 'upload' | 'rerun'; kind: string;
+  cover: string | null; document_id: string | null; status: ImportStatus; group: 'running' | 'waiting' | 'finished';
+  position: number | null; bytes_done: number | null; bytes_total: number | null;
+  pages_done: number | null; pages_total: number | null; found: number | null; error: string | null;
+  created_by: string | null; created_by_name: string | null; created_at: number; started_at: number | null;
+  finished_at: number | null; job_id: string | null; source_key?: string; pages?: number[] | null;
+}
+export interface QueueList {
+  items: QueueItem[]; paused: boolean; users: { id: string; name: string }[];
+  counts: { running: number; waiting: number; done_today: number; found_today: number; active: number; done: number; error: number; cancelled: number; all: number };
+}
+export type EnqueueResult = { existing: true; document_id: string; source_key: string } | { existing: false; import: Import };
 
 export interface BpsResult { page: number; pages: number; total: number; items: BpsItem[] }
 export interface ImportState {
@@ -182,6 +213,7 @@ export const api = {
   documents: (search = '') => req<Doc[]>('GET', `/api/documents?${q({ q: search })}`),
   document: (id: string) => req<Doc>('GET', `/api/documents/${id}`),
   renameDocument: (id: string, title: string) => req<Doc>('PATCH', `/api/documents/${id}`, { title }),
+  patchDocument: (id: string, p: { title?: string; year?: number; tags?: string[]; category?: string[] }) => req<Doc>('PATCH', `/api/documents/${id}`, p),
   setCategory: (id: string, category: string[]) => req<Doc>('PATCH', `/api/documents/${id}`, { category }),
   autoCategory: (id: string) => req<Doc>('POST', `/api/documents/${id}/auto-category`),
   moveDocuments: (ids: string[], category: string[]) => req<{ ok: true; changed: number }>('POST', '/api/documents/move', { ids, category }),
@@ -189,12 +221,16 @@ export const api = {
   deleteDocument: (id: string, purge = false) => req<{ ok: true }>('DELETE', `/api/documents/${id}?${q({ purge: purge || '' })}`),
   restoreDocument: (id: string) => req<Doc>('POST', `/api/documents/${id}/restore`),
   /** upload with progress (XHR: fetch has no upload progress) */
-  upload: (file: File, extract = true, engine = 'auto', onProgress?: (done: number, total: number) => void) =>
+  upload: (file: File, extract = true, engine = 'auto', onProgress?: (done: number, total: number) => void,
+    meta: { year?: number; tags?: string[]; category?: string[] | null } = {}) =>
     new Promise<{ document: Doc; job: Job | null }>((resolve, reject) => {
       const f = new FormData();
       f.append('file', file);
       f.append('extract', String(extract));
       f.append('engine', engine);
+      if (meta.year) f.append('year', String(meta.year));
+      if (meta.tags?.length) f.append('tags', JSON.stringify(meta.tags));
+      if (meta.category) f.append('category', JSON.stringify(meta.category));
       const x = new XMLHttpRequest();
       x.open('POST', '/api/documents');
       x.upload.onprogress = (e) => onProgress?.(e.loaded, e.total || file.size);
@@ -222,7 +258,7 @@ export const api = {
 
   tables: (docId: string) => req<Table[]>('GET', `/api/documents/${docId}/tables`),
   table: (id: string) => req<Table>('GET', `/api/tables/${id}`),
-  searchTables: (p: { state?: string; edited?: boolean | ''; docs?: string; kinds?: string; q?: string; sort?: string; offset?: number; limit?: number }) =>
+  searchTables: (p: { state?: string; edited?: boolean | ''; docs?: string; kinds?: string; validator?: string; q?: string; sort?: string; offset?: number; limit?: number }) =>
     req<TableSearch>('GET', `/api/tables?${q({ ...p, state: p.state ?? '' })}`),
   createTable: (docId: string, page: number, rows?: string[][]) =>
     req<Table>('POST', `/api/documents/${docId}/tables`, { page, ...(rows ? { rows } : {}) }),
@@ -267,6 +303,21 @@ export const api = {
     req<{ existing: true; document: Doc } | { existing: false; import: ImportState }>('POST', '/api/bps/import', p),
   importStatus: (id: string) => req<ImportState>('GET', `/api/bps/import/${id}`),
   importCancel: (id: string) => req<{ ok: true }>('POST', `/api/bps/import/${id}/cancel`),
+
+  // the queue: BPS imports and table searches
+  queue: (p: { status?: string; source?: string; by?: string } = {}) => req<QueueList>('GET', `/api/queue?${q(p)}`),
+  queueCount: () => req<{ active: number; paused: boolean }>('GET', '/api/queue/count'),
+  enqueue: (items: { kind: string; id: string; domain: string; lang?: string; extract?: boolean; title?: string; cover?: string | null; size?: string | null }[]) =>
+    req<{ results: EnqueueResult[] }>('POST', '/api/queue/imports', { items }),
+  cancelImport: (id: string) => req<Import>('POST', `/api/queue/imports/${id}/cancel`),
+  cancelImports: (ids: string[]) => req<{ ok: true }>('POST', '/api/queue/imports/cancel', { ids }),
+  retryImport: (id: string) => req<Import>('POST', `/api/queue/imports/${id}/retry`),
+  moveImport: (id: string, to: 'up' | 'top') => req<{ ok: true }>('POST', `/api/queue/imports/${id}/move`, { to }),
+  removeImport: (id: string) => req<{ ok: true }>('DELETE', `/api/queue/imports/${id}`),
+  retryJob: (id: string) => req<Job>('POST', `/api/queue/jobs/${id}/retry`),
+  dismissJob: (id: string) => req<{ ok: true }>('DELETE', `/api/queue/jobs/${id}`),
+  pauseQueue: (paused: boolean) => req<{ paused: boolean }>('POST', '/api/queue/pause', { paused }),
+  clearQueue: () => req<{ ok: true; removed: number }>('POST', '/api/queue/clear'),
 
   // admin: users (password login and / or Google login by e-mail)
   users: () => req<User[]>('GET', '/api/users'),
